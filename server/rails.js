@@ -7,6 +7,7 @@ import { config } from './config.js'
 import { newId, sha256, fail, money } from './core.js'
 import { post, sys } from './ledger.js'
 import { log } from './log.js'
+import { deliver } from './messaging.js'
 
 export async function enqueue(client, kind, payload, idem) {
   await client.query('INSERT INTO outbox (kind, payload, idem) VALUES ($1,$2,$3) ON CONFLICT (idem) DO NOTHING', [kind, payload, idem])
@@ -137,7 +138,9 @@ export async function notify(client, { userId = null, partyId = null, template, 
 const notifier = {
   async send(n, phone) {
     if (config.notifier === 'log') { log.info({ to: phone, text: n.text, link: n.link }, 'notification (sandbox: not sent)'); return }
-    throw new Error('No WhatsApp/SMS provider configured')
+    const { channel, ref } = await deliver(n, phone)
+    log.info({ id: n.id, channel, ref }, 'notification sent')
+    return channel
   },
 }
 
@@ -175,8 +178,9 @@ const handlers = {
   },
   async 'notify.send'({ id }) {
     const n = await one(pool, 'SELECT n.*, p.phone FROM notifications n JOIN parties p ON p.id = n.party_id WHERE n.id=$1', [id])
-    await notifier.send(n, n.phone)
-    await pool.query(`UPDATE notifications SET status='sent' WHERE id=$1`, [id])
+    const channel = await notifier.send(n, n.phone)
+    // Records the channel actually used (WhatsApp, or SMS when the template has no approved WhatsApp counterpart).
+    await pool.query(`UPDATE notifications SET status='sent', channel=COALESCE($2, channel) WHERE id=$1`, [id, channel ?? null])
   },
 }
 

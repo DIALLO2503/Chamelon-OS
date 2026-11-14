@@ -19,11 +19,12 @@ Related: [api.md](api.md), [architecture.md](architecture.md#design-decisions), 
 
 - `NEXUS_ENV` must be `sandbox`, `test` or `live`; otherwise the process throws at import.
 - `config.sandbox` is true for anything but `live`.
-- In `live`: `JWT_SECRET`, `LINK_SECRET`, `DATABASE_URL` are required (no generated secrets); `PAYMENT_PROVIDER` must be `partner` with `PARTNER_BASE_URL`, `PARTNER_API_KEY`, `PARTNER_WEBHOOK_SECRET`; `SMS_PROVIDER` and `SMS_API_KEY` must be set.
+- In `live`: `JWT_SECRET`, `LINK_SECRET`, `DATABASE_URL` are required (no generated secrets); `PAYMENT_PROVIDER` must be `partner` with `PARTNER_BASE_URL`, `PARTNER_API_KEY`, `PARTNER_WEBHOOK_SECRET`; `SMS_PROVIDER` must be set and `NOTIFIER` must be `sms` or `whatsapp`.
+- Whenever a messaging configuration is given, in any environment, it is validated at import: `SMS_PROVIDER=twilio` needs `TWILIO_ACCOUNT_SID`, `SMS_API_KEY` and a sender (`SMS_FROM` or `TWILIO_MESSAGING_SERVICE_SID`); a `NOTIFIER` other than `log` needs `SMS_PROVIDER`; `NOTIFIER=whatsapp` needs `WHATSAPP_FROM`.
 - Outside live, secrets are generated once into `.local/` (mode 0600, git-ignored) and the webhook secret is the public constant `sandbox-webhook-secret`.
 - Only outside live: login codes are returned in API responses, `GET /api/config/sandbox` lists users, `wallet.verify` raises KYC in one tap, the simulated partner settles everything, and `server/seed.js` runs (it refuses any other env).
 
-Gap: `NOTIFIER` is not checked at boot; live defaults to `whatsapp`, for which no sender exists.
+If `SMS_PROVIDER` is set outside live, login codes are sent by SMS and still returned in the API response: a sandbox is never a safe place for real users.
 
 ## Login codes (OTP), `server/auth.js`
 
@@ -32,7 +33,8 @@ Gap: `NOTIFIER` is not checked at boot; live defaults to `whatsapp`, for which n
 - Per phone, rolling 24 hours (`otp_events`): at most 5 sends and 10 failures in `live` and `test`; 50 and 50 in sandbox. Failures are counted per phone, so re-sending does not reset them.
 - `/api/auth/*` is limited to 20 requests a minute per IP.
 - The same `issueOtp`/`consumeOtp` protect public link actions, sent to the link's party phone.
-- Not done: captcha or device attestation, number-type checks, per-IP-prefix caps, real SMS delivery.
+- Not done: captcha or device attestation, number-type checks, per-IP-prefix caps, delivery receipts (a code is considered sent when Twilio accepts the request).
+- Sending: `server/messaging.js` posts to Twilio after the caps check. A send counts against the daily cap even if the provider refuses it, the caller gets a 502, and the message body is never logged.
 
 ## PIN and lockout
 
@@ -130,7 +132,7 @@ Not handled: erasure (postings and entries are append-only by trigger and hold f
 Stated plainly.
 
 **Still open:**
-1. Live boots, but `issueOtp` only logs (no SMS is sent) and `notify.send` throws (no WhatsApp sender): live login and outbound messages do not work until a provider is connected.
+1. SMS and WhatsApp sending (`server/messaging.js`) is tested only against a local stand-in for Twilio: no real account, sender registration or approved WhatsApp template exists yet. No opt-in or opt-out is recorded for WhatsApp recipients, and a retried `notify.send` can deliver the same message twice if the process dies between the send and the status update.
 2. `dispute_evidence` is read but nothing writes it: there is no way to add evidence to a dispute.
 3. The coverage check is implied by the ledger's zero-sum rule and does not compare with the partner's actual balance ([money.md](money.md#reconciliation-and-coverage)).
 

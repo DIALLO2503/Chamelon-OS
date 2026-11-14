@@ -13,8 +13,8 @@ Sandbox only. No licence and no payment partner are signed. Everything external 
 | Piece | In sandbox | Where the live version plugs in |
 |---|---|---|
 | Payment partner (collections, payouts, custody) | Simulated; settles by signed webhook about 0.4 s later | `server/rails.js` (`partnerProvider`) |
-| Login codes (SMS) | Returned to the client and shown on screen | `server/auth.js` (`issueOtp`): **not implemented** for live |
-| WhatsApp/SMS notifications | Written to the log; the in-app inbox works | `server/rails.js` (`notifier`): **not implemented** for live |
+| Login codes (SMS) | Returned to the client and shown on screen | `server/messaging.js` (Twilio), called by `issueOtp`: implemented, tested against a stand-in, not yet against a real account |
+| WhatsApp/SMS notifications | Written to the log; the in-app inbox works | `server/messaging.js` (Twilio), called by the outbox: same status; WhatsApp templates still need Meta approval |
 | Identity checks | One tap (`wallet.verify`), or an admin sets the level | Partner or KYC vendor writing `users.kyc_level` |
 | FX rates and fees | Static values in `server/catalog.js` | Partner quotes |
 | Bill payment | Simulated payout | Biller integrations |
@@ -37,7 +37,7 @@ npm run seed                     # migrates, then creates 19 demo accounts (PIN 
 npm run build                    # builds the PWA into dist/
 npm run server                   # http://localhost:3001 (serves dist/ and /api)
 
-# 3. Tests (36, end to end, against nexus_test; the schema is dropped and recreated)
+# 3. Tests (41, end to end, against nexus_test; the schema is dropped and recreated)
 npm test
 ```
 
@@ -90,8 +90,11 @@ All variables are read in `server/config.js` (plus `CUSTODY_<ID>` in `server/cat
 | `UPLOAD_DIR` | `.local/uploads` | Where re-encoded photos are written. |
 | `PAYMENT_PROVIDER` | `sandbox` (`partner` in live) | Live refuses anything but `partner`. |
 | `PARTNER_BASE_URL`, `PARTNER_API_KEY`, `PARTNER_WEBHOOK_SECRET` | webhook secret `sandbox-webhook-secret` outside live | Partner API and webhook HMAC secret. All three required in live. |
-| `SMS_PROVIDER`, `SMS_API_KEY` | none | Required in live, but no SMS sending exists yet. |
-| `NOTIFIER` | `log` (`whatsapp` in live) | `log` writes messages to the log. Any other value makes outbound messages fail (no provider). |
+| `SMS_PROVIDER`, `SMS_API_KEY`, `TWILIO_ACCOUNT_SID` | none | `SMS_PROVIDER` must be `twilio`; `SMS_API_KEY` is the Twilio auth token. Required in live. When set outside live, login codes are sent by SMS as well as shown on screen. |
+| `SMS_FROM` or `TWILIO_MESSAGING_SERVICE_SID` | none | SMS sender: a number or alphanumeric ID, or a messaging service that picks the sender per country. One is required with `SMS_PROVIDER`. |
+| `NOTIFIER` | `log` (`whatsapp` in live) | `log` writes messages to the log (refused in live). `sms` sends every message by SMS. `whatsapp` sends approved templates on WhatsApp and the rest by SMS. |
+| `WHATSAPP_FROM`, `WHATSAPP_TEMPLATES` | none | WhatsApp sender number (required with `NOTIFIER=whatsapp`) and a JSON object mapping notification template names to Twilio Content SIDs. |
+| `TWILIO_BASE_URL` | `https://api.twilio.com` | Override for tests. |
 | `AUTO_RELEASE_DAYS` | `7` | Silence-means-yes delay for a finished job stage. |
 | `ORDER_RELEASE_HOURS` | `72` | Silence-means-yes delay for a delivered protected order. |
 | `CUSTODY_MA`, `CUSTODY_SN`, `CUSTODY_GN`, `CUSTODY_FR`, `CUSTODY_AE` | catalog value | Override a country's custody stage (`record` or `held`). |
@@ -109,7 +112,7 @@ All variables are read in `server/config.js` (plus `CUSTODY_<ID>` in `server/cat
 | [docs/security.md](docs/security.md) | Threat model, controls, data protection, known gaps |
 | [docs/operations.md](docs/operations.md) | Running a pilot, scheduler, runbooks |
 | [docs/partner-integration.md](docs/partner-integration.md) | Go-live checklist for a licensed partner |
-| [docs/testing.md](docs/testing.md) | What the 36 tests prove and how to add one |
+| [docs/testing.md](docs/testing.md) | What the 41 tests prove and how to add one |
 | [docs/glossary.md](docs/glossary.md) | Product and domain terms |
 
 ## Layout

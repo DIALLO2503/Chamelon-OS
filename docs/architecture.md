@@ -27,7 +27,7 @@ flowchart LR
   end
   DB[("PostgreSQL<br/>accounts, entries, postings,<br/>intents, outbox, provider_ops, ...")]
   Partner["Licensed partner<br/>(simulated in sandbox)"]
-  WA["WhatsApp / SMS<br/>(log only today)"]
+  WA["WhatsApp / SMS<br/>(Twilio; log in sandbox)"]
 
   PWA -->|/api| Auth & Engine
   Admin -->|/api/admin| AdminR
@@ -125,6 +125,7 @@ One component, `src/ui/ActionSheet.jsx`, runs every action: form → review → 
 | Forms, quotes, PIN confirm, idempotency | `server/engine.js` |
 | Postings, limits, reconcile | `server/ledger.js` |
 | Outbox, provider adapters, webhook, notifications, links | `server/rails.js` |
+| SMS and WhatsApp sending (Twilio) | `server/messaging.js` |
 | OTP, PIN, sessions | `server/auth.js` |
 | Pages for people without the app | `server/public.js`, `src/public/PublicPage.jsx` |
 | Photos | `server/uploads.js` |

@@ -7,6 +7,7 @@ import { fail, newId, sha256, normalizePhone } from './core.js'
 import { REGIONS, personaExists } from './catalog.js'
 import { audit, partyForUser } from './context.js'
 import { log } from './log.js'
+import { smsConfigured, sendSms } from './messaging.js'
 
 const OTP_TTL_MIN = 5
 const CAPS = config.sandbox && config.env !== 'test'
@@ -103,8 +104,18 @@ export async function issueOtp(phone, ip) {
       ON CONFLICT (phone) DO UPDATE SET hash=EXCLUDED.hash, expires_at=EXCLUDED.expires_at, attempts=0`, [phone, otpHash(phone, code), OTP_TTL_MIN])
     await c.query(`INSERT INTO otp_events (phone, kind, ip) VALUES ($1,'send',$2)`, [phone, ip])
   })
-  // Live: the code goes to the SMS provider (config.js refuses to boot live without one). Sandbox: returned to the caller.
+  // The code goes out by SMS whenever a provider is configured (config.js refuses to boot live without one).
+  // The send counts against the daily cap even if delivery fails, so a failing provider cannot be used to probe for free.
+  if (smsConfigured()) {
+    try {
+      await sendSms(phone, `Nexus : votre code est ${code}. Il expire dans ${OTP_TTL_MIN} minutes. Ne le partagez avec personne.`)
+    } catch (e) {
+      log.error({ phone, err: e.message }, 'otp sms failed')
+      fail('Impossible d’envoyer le code pour le moment. Réessayez dans un instant.', 502)
+    }
+  }
   if (!config.sandbox) log.info({ phone }, 'otp issued')
+  // Outside live the code is also returned to the caller, which shows it on screen.
   return config.sandbox ? code : null
 }
 

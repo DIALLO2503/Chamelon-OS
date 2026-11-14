@@ -13,7 +13,7 @@ For the founder or the first ops hire. Related: [money.md](money.md), [security.
 
 ## Environment variables
 
-See the table in the [README](../README.md#configuration). Live minimum: `NEXUS_ENV=live`, `DATABASE_URL`, `JWT_SECRET`, `LINK_SECRET`, `PUBLIC_URL`, `PAYMENT_PROVIDER=partner`, `PARTNER_BASE_URL`, `PARTNER_API_KEY`, `PARTNER_WEBHOOK_SECRET`, `SMS_PROVIDER`, `SMS_API_KEY`, and `TRUST_PROXY` behind a proxy. Today live still cannot send login codes or WhatsApp messages ([security.md](security.md#known-gaps-and-non-goals)).
+See the table in the [README](../README.md#configuration). Live minimum: `NEXUS_ENV=live`, `DATABASE_URL`, `JWT_SECRET`, `LINK_SECRET`, `PUBLIC_URL`, `PAYMENT_PROVIDER=partner`, `PARTNER_BASE_URL`, `PARTNER_API_KEY`, `PARTNER_WEBHOOK_SECRET`, `SMS_PROVIDER=twilio`, `SMS_API_KEY`, `TWILIO_ACCOUNT_SID`, `SMS_FROM` or `TWILIO_MESSAGING_SERVICE_SID`, `NOTIFIER` (`sms`, or `whatsapp` with `WHATSAPP_FROM` and `WHATSAPP_TEMPLATES`), and `TRUST_PROXY` behind a proxy. Messaging has not yet been run against a real Twilio account ([security.md](security.md#known-gaps-and-non-goals)).
 
 ## Migrations
 
@@ -77,7 +77,7 @@ The admin console opens from Services → "Console d'administration".
 1. Console → outbox (failed) or `GET /api/admin/outbox`; read `last_error`.
 2. Fix the cause (partner down, bad credentials, bad phone).
 3. `POST /api/admin/outbox/:id/retry` (failed → pending, attempts 0).
-4. A `notify.send` failing in live means no WhatsApp provider: expected until one is integrated.
+4. A `notify.send` failure carries Twilio's status and error code in `last_error` (for example `Twilio 400 (code 21211)` for an invalid number, `63016` for a WhatsApp message outside an approved template). Fix the number, the sender or the template mapping in `WHATSAPP_TEMPLATES`, then retry.
 5. `running` rows are retried automatically after their five-minute lease. If one keeps coming back, check with the partner whether the call was received (reference = `provider_ops.id`).
 
 ### Runbook: payout stuck pending

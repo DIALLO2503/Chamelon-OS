@@ -17,8 +17,8 @@ Related: [money.md](money.md), [custody-stages.md](custody-stages.md#switching-a
 | 7 | KYC: partner or vendor onboarding writes `users.kyc_level` | Sandbox one-tap or admin only |
 | 8 | Tier limits from the partner's rules in `REGIONS[id].limits` | Placeholders |
 | 9 | Sanctions/PEP screening at onboarding and on payouts; monitoring | Not implemented |
-| 10 | SMS for login codes (`issueOtp`) | Not implemented |
-| 11 | WhatsApp/SMS notifications (`notifier.send`) | Not implemented |
+| 10 | SMS for login codes (`issueOtp`) | Twilio adapter implemented; needs an account and a registered sender per country |
+| 11 | WhatsApp/SMS notifications (`notifier.send`) | Twilio adapter implemented; needs a WhatsApp Business sender and approved templates |
 | 12 | Agent network provisioning (KYB) feeding the `agent` role | Manual admin approval |
 | 13 | Data processing agreement, residency, retention | Not decided |
 | 14 | Per-country provider routing (one adapter per partner or rail) | One global adapter |
@@ -85,11 +85,18 @@ The sandbox adapter returns `SBX-P-…`/`SBX-C-…` refs and posts a signed `…
 
 ## SMS hook
 
-`issueOtp(phone, ip)` in `server/auth.js` stores the hashed code and returns it outside live. In live it only logs `otp issued`: **no SMS is sent**. The integration goes there (call the provider with `SMS_PROVIDER`/`SMS_API_KEY`, after the caps check). Live boot already requires both variables.
+`issueOtp(phone, ip)` in `server/auth.js` stores the hashed code, then calls `sendSms` in `server/messaging.js` whenever `SMS_PROVIDER` is set (always in live). The adapter posts to Twilio's Messages API with `TWILIO_ACCOUNT_SID` and `SMS_API_KEY` (the auth token), from `SMS_FROM` or through `TWILIO_MESSAGING_SERVICE_SID`. A refused or timed-out send returns a 502 to the caller. Outside live the code is also returned in the response.
+
+Before a pilot: register the sender in each country (alphanumeric sender IDs need pre-registration in Morocco and Senegal, among others; a messaging service lets Twilio pick the right sender per destination), and check the per-message price per country, since login codes are the main recurring messaging cost.
 
 ## Notification hook
 
-`notify()` writes `notifications`. For a party with an account it is `inapp`/`delivered`; for a party without one, `whatsapp`/`pending` plus an outbox `notify.send`. The worker calls `notifier.send(notification, phone)`: with `NOTIFIER=log` it logs and marks `sent`; any other value throws `No WhatsApp/SMS provider configured`. A WhatsApp Business provider (approved templates per `notifications.template`, opt-in) goes in `notifier`.
+`notify()` writes `notifications`. For a party with an account it is `inapp`/`delivered`; for a party without one, `whatsapp`/`pending` plus an outbox `notify.send`. The worker calls `notifier.send(notification, phone)`: with `NOTIFIER=log` it logs and marks `sent`. Otherwise it calls `deliver` in `server/messaging.js` and stores the channel actually used in `notifications.channel`:
+
+- `NOTIFIER=sms`: the text and the link go by SMS.
+- `NOTIFIER=whatsapp`: if `WHATSAPP_TEMPLATES` maps `notifications.template` to a Twilio Content SID, the message goes on WhatsApp from `WHATSAPP_FROM` with `{{1}}` = text and `{{2}}` = link; any other template falls back to SMS.
+
+WhatsApp only lets a business open a conversation with a template approved by Meta, so each template must be created in Twilio's Content Template Builder with those two variables and approved before it is added to `WHATSAPP_TEMPLATES`. Recipient opt-in is **not recorded**.
 
 ## KYC levels
 
@@ -112,6 +119,7 @@ The sandbox adapter returns `SBX-P-…`/`SBX-C-…` refs and posts a signed `…
 | Demo account list and PIN | `/api/config/sandbox` in `server/index.js`; `server/seed.js` |
 | One-tap identity verification | `wallet.verify` in `server/modules/wallet.js` |
 | Notifications only logged | `notifier` in `server/rails.js` (`NOTIFIER=log`) |
+| Login code still returned to the client when an SMS provider is set | `issueOtp` in `server/auth.js` |
 | Bill payment simulated (payout to `biller:…`) | `wallet.bill` in `server/modules/wallet.js` |
 | Static rates and fees, labelled "Taux du jour (bac à sable)" | `server/catalog.js`, `server/modules/remit.js` |
 | Placeholder limits | `REGIONS[id].limits` in `server/catalog.js` |
