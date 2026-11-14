@@ -7,7 +7,7 @@ Related: [api.md](api.md), [architecture.md](architecture.md#design-decisions), 
 | Actor | Wants to | Main controls |
 |---|---|---|
 | Stranger on the internet | Take over an account, mint money, scrape phones and names | Fail-closed env, OTP caps, PIN, masked names, lookup cap, rate limits |
-| Thief with an unlocked phone | Spend the balance | PIN on every money action, 5-try lockout, session revocation by freeze |
+| Thief with an unlocked phone | Spend the balance | PIN on every money action, 5-try lockout, 24-hour money hold after a PIN reset, session revocation by freeze |
 | Malicious user | Pay twice, overdraw, replay, act on others' rows | Quotes bound by hash, idempotency, compare-and-set, row checks, DB floors |
 | Self-declared agent and accomplice | Earn commission on fake cash loops | Agent role approved by admin, customer-created cash-out code, round trips withheld |
 | Holder of someone else's link | Act for the counterparty | Viewing only with the link; committing actions need a code sent to the party's phone |
@@ -41,7 +41,8 @@ If `SMS_PROVIDER` is set outside live, login codes are sent by SMS and still ret
 - 4–6 digits; repeated digits and straight runs (`1234`, `9876`) are refused. Stored as `salt:scrypt(pin, salt, 32)`.
 - Required to open a session on a new device (after the OTP) and to confirm every intent.
 - 5 consecutive failures lock the PIN for 15 minutes (423). Failures are counted in their own transaction and audited (`pin.failed`). A success resets the counter.
-- No PIN reset flow exists.
+- Forgotten code: `POST /api/auth/pin/reset` with the `pinToken` issued after a login code and a new PIN. It replaces the code, clears the lockout, revokes every existing session, writes `pin.reset` to the audit log and an in-app message, and starts a hold: for `PIN_RESET_HOLD_HOURS` (24) every money confirmation answers 423. A login code proves possession of the SIM, not identity, so the hold is what protects against a stolen unlocked phone or a SIM swap: the owner has that time to get the account frozen. The hold does not cover actions taken from public links, which never ask for the PIN.
+- A frozen account cannot reset its code.
 
 ## Sessions, refresh rotation, revocation
 
@@ -148,8 +149,9 @@ Stated plainly.
 - Malformed JSON gets the French "Requête invalide".
 - `escrow.refund` and `orders.refund` are money actions: quote first, PIN to confirm.
 - Either side of an open dispute can add evidence (a statement of up to 500 characters, a photo, or both; 10 pieces per side): action `evidence` on the escrow, job or order in the app, and on the public link behind a login code. A photo must have been uploaded by the same person. Evidence closes when the dispute is resolved.
+- A forgotten secret code can be replaced after a login code, with a 24-hour hold on money actions (above).
 - Photos are served again: with the default `UPLOAD_DIR` (`.local/uploads`) every `GET /api/uploads/:id` answered 404, because Express refuses a bare absolute path containing a dot-segment.
 
-**Not implemented:** sanctions/PEP screening, transaction monitoring and suspicious-activity reporting, partner statement reconciliation, catalog versioning, PIN reset, device binding, CSV export for regulators, CI, backups, metrics and error tracking, i18n, link revocation UI.
+**Not implemented:** sanctions/PEP screening, transaction monitoring and suspicious-activity reporting, partner statement reconciliation, catalog versioning, device binding, CSV export for regulators, backups, metrics and error tracking, i18n, link revocation UI.
 
 **Non-goals for this codebase:** Nexus holding customer funds itself; credit or lending; card payments.

@@ -191,3 +191,32 @@ test('both sides of a dispute can add evidence, from the app or from a link; nob
   await pool.query(`UPDATE disputes SET status='resolved' WHERE id=$1`, [d.id])
   await assert.rejects(act(payer, 'escrow', 'evidence', { text: 'Trop tard' }, e.id), /Aucun litige en cours/, 'a resolved dispute takes no more evidence')
 })
+
+test('a forgotten secret code is replaced after a login code; other sessions close and money waits 24 hours', async () => {
+  const jwt = (await import('jsonwebtoken')).default, { config } = await import('../config.js')
+  const post = (path, body, headers) => raw(path, JSON.stringify(body), headers)
+  const u = await user('SN', 'boutique', { fund: 5000 })
+  const oldSid = (await one(pool, `INSERT INTO sessions (id, user_id, refresh_hash) VALUES (gen_random_uuid(), $1, $2) RETURNING id`, [u.id, idem()])).id
+  const oldAccess = { Authorization: `Bearer ${jwt.sign({ sub: u.id, sid: oldSid, typ: 'access' }, config.jwtSecret, { expiresIn: '5m' })}` }
+  const me = headers => fetch(`${base}/me`, { headers }).then(r => r.status)
+  assert.equal(await me(oldAccess), 200)
+
+  assert.equal((await post('/auth/pin/reset', { pin: '7391' })).status, 401, 'no reset without a verified phone')
+  const { sandboxCode } = await post('/auth/otp', { phone: u.phone })
+  const { pinToken } = await post('/auth/verify', { phone: u.phone, code: sandboxCode })
+  assert.equal((await post('/auth/pin/reset', { pinToken, pin: '1111' })).status, 400, 'obvious codes are still refused')
+  const reset = await post('/auth/pin/reset', { pinToken, pin: '7391' })
+  assert.equal(reset.status, 200)
+  assert.equal(reset.holdHours, 24)
+
+  assert.equal(await me(oldAccess), 401, 'sessions opened before the reset are closed')
+  assert.equal(await me({ Authorization: `Bearer ${reset.accessToken}` }), 200)
+  assert.equal((await one(pool, `SELECT count(*)::int AS n FROM notifications WHERE user_id=$1 AND template='pin.reset'`, [u.id])).n, 1, 'the owner is told')
+
+  await assert.rejects(act(u, 'wallet', 'topup', { amount: '500' }), /Code secret incorrect|incorrect/i, 'the old code no longer works')
+  await assert.rejects(act(u, 'wallet', 'topup', { amount: '500' }, null, { pin: '7391' }), /suspendus/, 'money actions wait during the hold')
+  await pool.query(`UPDATE users SET pin_reset_at = now() - interval '25 hours' WHERE id=$1`, [u.id])
+  await act(u, 'wallet', 'topup', { amount: '500' }, null, { pin: '7391' })
+  await settleAll()
+  assert.equal(await bal(u), 5500)
+})

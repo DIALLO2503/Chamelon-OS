@@ -53,6 +53,8 @@ export const config = {
   },
   // WHATSAPP_TEMPLATES maps a notification template name to its approved Twilio Content SID, as JSON.
   whatsapp: { from: env.WHATSAPP_FROM, templates: jsonEnv('WHATSAPP_TEMPLATES') },
+  // After a forgotten secret code is replaced, money actions wait this long: time for the owner to react to a stolen phone or SIM.
+  pinResetHoldHours: Number(env.PIN_RESET_HOLD_HOURS || 24),
   autoReleaseDays: Number(env.AUTO_RELEASE_DAYS || 7),
   orderReleaseHours: Number(env.ORDER_RELEASE_HOURS || 72),
 }

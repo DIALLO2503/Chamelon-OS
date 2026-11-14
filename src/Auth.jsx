@@ -49,6 +49,10 @@ export default function Auth({ onDone }) {
     }
   })
   const login = pin => run(async () => finish((await api('/auth/pin', { body: { pinToken: tokens.pin, pin } })).accessToken))
+  const resetPin = pin => run(async () => {
+    if (pin !== firstPin) { setFirstPin(''); setStep('reset1'); throw new Error('Les deux codes ne sont pas identiques. Recommencez.') }
+    finish((await api('/auth/pin/reset', { body: { pinToken: tokens.pin, pin } })).accessToken)
+  })
   const register = pin => run(async () => {
     if (pin !== firstPin) { setFirstPin(''); setStep('pin1'); throw new Error('Les deux codes ne sont pas identiques. Recommencez.') }
     finish((await api('/auth/register', { body: { signupToken: tokens.signup, name: name.trim(), region: regionId, persona: personaId, pin } })).accessToken)
@@ -103,6 +107,21 @@ export default function Auth({ onDone }) {
           <>
             <h1 className="screen-title">Bonjour {returning.split(' ')[0]}</h1>
             <PinPad label="Votre code secret" busy={busy} error={error} onSubmit={login} />
+            <button type="button" className="cta quiet" disabled={busy} onClick={() => { setFirstPin(''); setError(''); setStep('reset1') }}>Code secret oublié ?</button>
+          </>
+        )}
+        {step === 'reset1' && (
+          <>
+            <h1 className="screen-title">Nouveau code secret</h1>
+            <p className="muted">Votre numéro vient d’être vérifié. Par sécurité, les paiements seront suspendus pendant 24 heures après le changement ; vous pourrez consulter votre compte.</p>
+            <PinPad label="Nouveau code secret" busy={busy} error={error} onSubmit={pin => { setFirstPin(pin); setError(''); setStep('reset2') }} />
+            <button type="button" className="cta quiet" disabled={busy} onClick={() => { setError(''); setStep('pin') }}>Retour</button>
+          </>
+        )}
+        {step === 'reset2' && (
+          <>
+            <h1 className="screen-title">Confirmez votre code</h1>
+            <PinPad label="Saisissez-le à nouveau" busy={busy} error={error} onSubmit={resetPin} />
           </>
         )}
 
@@ -153,7 +172,7 @@ export default function Auth({ onDone }) {
           </>
         )}
 
-        {error && !['pin', 'pin1', 'pin2'].includes(step) && <p className="error" role="alert">{error}</p>}
+        {error && !['pin', 'pin1', 'pin2', 'reset1', 'reset2'].includes(step) && <p className="error" role="alert">{error}</p>}
       </div>
     </div>
   )

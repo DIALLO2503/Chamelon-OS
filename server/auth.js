@@ -56,6 +56,16 @@ export async function verifyPin(userId, pin) {
 
 /* ---------------- sessions ---------------- */
 
+// A login code alone proves the SIM, not the person: after a reset, money actions wait, so a stolen phone or a swapped
+// SIM cannot empty the account before its owner has it frozen.
+export async function assertNoPinHold(userId) {
+  const u = await one(pool, `SELECT pin_reset_at + make_interval(hours => $2) AS until FROM users WHERE id=$1`, [userId, config.pinResetHoldHours])
+  if (u?.until && new Date(u.until) > new Date()) {
+    const when = new Date(u.until).toLocaleString('fr-FR', { day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit', timeZone: 'UTC' })
+    fail(`Par sécurité, les paiements sont suspendus après un changement de code secret. Ils reprennent le ${when} UTC.`, 423)
+  }
+}
+
 async function openSession(c, user, req, res) {
   const sid = newId(), refresh = randomBytes(32).toString('base64url')
   await c.query('INSERT INTO sessions (id, user_id, refresh_hash, user_agent) VALUES ($1,$2,$3,$4)', [sid, user.id, sha256(refresh), String(req.get('user-agent') ?? '').slice(0, 200)])
@@ -155,6 +165,24 @@ auth.post('/pin', async (req, res) => {
   await verifyPin(sub, req.body?.pin)
   const out = await tx(async c => openSession(c, await one(c, 'SELECT * FROM users WHERE id=$1', [sub]), req, res))
   res.json(out)
+})
+
+// Forgotten secret code: the phone was just verified by a login code (that is what the pinToken proves).
+// Sets a new code, closes every other session, tells the owner, and starts the money hold.
+auth.post('/pin/reset', async (req, res) => {
+  const { sub } = readPurpose(req.body?.pinToken, 'login')
+  const pinHash = hashPin(String(req.body?.pin ?? ''))
+  const out = await tx(async c => {
+    const user = await one(c, 'SELECT * FROM users WHERE id=$1 FOR UPDATE', [sub])
+    if (user.frozen) fail('Ce compte est suspendu. Contactez l’assistance.', 403)
+    await c.query('UPDATE users SET pin_hash=$2, pin_failures=0, pin_locked_until=NULL, pin_reset_at=now() WHERE id=$1', [sub, pinHash])
+    await c.query('UPDATE sessions SET revoked_at=now() WHERE user_id=$1 AND revoked_at IS NULL', [sub])
+    await audit(c, { actorId: sub, action: 'pin.reset', objectType: 'user', objectId: sub, ip: req.ip })
+    await c.query(`INSERT INTO notifications (user_id, channel, template, text, status) VALUES ($1,'inapp','pin.reset',$2,'delivered')`,
+      [sub, `Votre code secret a été changé. Les paiements sont suspendus ${config.pinResetHoldHours} h par sécurité. Si ce n’est pas vous, contactez l’assistance immédiatement.`])
+    return openSession(c, user, req, res)
+  })
+  res.json({ ...out, holdHours: config.pinResetHoldHours })
 })
 
 auth.post('/register', async (req, res) => {

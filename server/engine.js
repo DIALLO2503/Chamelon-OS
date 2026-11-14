@@ -2,7 +2,7 @@ import { pool, tx, one } from './db.js'
 import { MODULES, ACTIONS, REGIONS, fill, validateCatalog, moduleAvailable } from './catalog.js'
 import { fail, toMinor, normalizePhone, newId, sha256, stable } from './core.js'
 import { ctxFor, balanceBlock, feedBlock } from './context.js'
-import { verifyPin } from './auth.js'
+import { verifyPin, assertNoPinHold } from './auth.js'
 import wallet from './modules/wallet.js'
 import tontine from './modules/tontine.js'
 import escrow from './modules/escrow.js'
@@ -199,6 +199,7 @@ export async function perform(userId, modId, actId, { row = null, input = {}, id
 
 export async function confirmIntent(userId, intentId, { pin, idem, ip }) {
   await verifyPin(userId, pin)
+  await assertNoPinHold(userId)
   return tx(async c => {
     const prev = await idempotent(c, userId, idem, sha256(`confirm:${intentId}`))
     if (prev) return prev
