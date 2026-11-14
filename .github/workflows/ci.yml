@@ -42,4 +42,6 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - run: docker build -t nexus .
-      - run: docker compose -f deploy/docker-compose.yml --env-file deploy/.env.example config --quiet
+      # Same steps as docs/pilot.md, with the example values.
+      - run: cp deploy/.env.example deploy/.env
+      - run: docker compose -f deploy/docker-compose.yml --env-file deploy/.env config --quiet
