@@ -1,7 +1,9 @@
-// Outbound SMS and WhatsApp through Twilio's Messages API (one account covers both channels in every Nexus country).
+// Outbound SMS and WhatsApp. Two SMS providers: Twilio's Messages API (also the only WhatsApp route), and SMS Gateway
+// for Android (sms-gate.app, open source): a phone with a local SIM sends the messages, one phone per country.
 // Nothing here touches the database: auth.js calls sendSms for login codes, the outbox worker in rails.js calls deliver.
 // Message bodies are never logged: a login code is a credential.
 import { config } from './config.js'
+import { REGIONS } from './catalog.js'
 
 const TIMEOUT_MS = 10_000
 
@@ -26,10 +28,33 @@ async function twilioSend(params) {
   return { ref: data.sid ?? null }
 }
 
-export const smsConfigured = () => config.sms.provider === 'twilio'
+// The request is accepted by the relay, then pushed to the phone, which sends it from its SIM: a 2xx here means queued,
+// not delivered. A phone that is off or out of credit shows up in the app on the phone, not in this response.
+async function smsgateSend(phone, text) {
+  const region = Object.keys(REGIONS).find(id => phone.startsWith(REGIONS[id].dialCode))
+  const gw = config.smsgate.byRegion[region] ?? config.smsgate.default
+  if (!gw) throw new Error(`No SMS gateway phone configured for ${region ?? 'this country'}`)
+  let res
+  try {
+    res = await fetch(`${config.smsgate.baseUrl}/message`, {
+      method: 'POST',
+      headers: { Authorization: `Basic ${Buffer.from(`${gw.user}:${gw.password}`).toString('base64')}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ textMessage: { text }, phoneNumbers: [phone] }),
+      signal: AbortSignal.timeout(TIMEOUT_MS),
+    })
+  } catch (e) {
+    throw new Error(`SMS gateway unreachable: ${e.name === 'TimeoutError' ? 'timeout' : e.message}`)
+  }
+  const data = await res.json().catch(() => ({}))
+  if (!res.ok) throw new Error(`SMS gateway ${res.status}: ${data.message || 'request refused'}`)
+  return { ref: data.id ?? null }
+}
+
+export const smsConfigured = () => Boolean(config.sms.provider)
 
 export function sendSms(phone, text) {
   if (!smsConfigured()) throw new Error('No SMS provider configured')
+  if (config.sms.provider === 'smsgate') return smsgateSend(phone, text)
   return twilioSend({ To: phone, Body: text, ...(config.sms.messagingServiceSid ? {} : { From: config.sms.from }) })
 }
 

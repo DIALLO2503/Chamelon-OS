@@ -203,6 +203,13 @@ for (const [id, r] of Object.entries(REGIONS)) {
   if (override) r.custody = override
 }
 
+// SIGNUP_REGIONS=MA,GN opens sign-up in those countries only (a pilot). Unset: every country is open.
+// Accounts that already exist elsewhere keep working; closed countries are simply not offered.
+const open = process.env.SIGNUP_REGIONS?.split(',').map(s => s.trim()).filter(Boolean)
+for (const id of open ?? []) if (!REGIONS[id]) throw new Error(`SIGNUP_REGIONS: unknown country "${id}"`)
+export const regionOpen = id => Boolean(REGIONS[id]) && (!open || open.includes(id))
+export const openRegionIds = () => Object.keys(REGIONS).filter(regionOpen)
+
 export const CURRENCIES = Object.fromEntries(Object.values(REGIONS).map(r => [r.currency.code, r.currency]))
 export const fill = (text, vocab) => text?.replace(/\{(\w+)\}/g, (_, k) => vocab[k] ?? k)
 export const regionOfCurrency = code => Object.keys(REGIONS).find(id => REGIONS[id].currency.code === code)
@@ -238,13 +245,13 @@ export function validateCatalog(mods) {
 }
 
 export function listRegions() {
-  return Object.entries(REGIONS).map(([id, r]) => ({
+  return Object.entries(REGIONS).filter(([id]) => regionOpen(id)).map(([id, r]) => ({
     id, name: r.name, currency: r.currency, dialCode: r.dialCode, custody: r.custody,
     personas: Object.entries(r.personas).map(([pid, p]) => ({ id: pid, label: p.label, tagline: p.tagline, icon: p.icon, hue: p.hue, restricted: Boolean(p.restricted) })),
   }))
 }
 
-export const personaExists = (regionId, personaId) => Boolean(REGIONS[regionId]?.personas[personaId])
+export const personaExists = (regionId, personaId) => regionOpen(regionId) && Boolean(REGIONS[regionId].personas[personaId])
 
 // What a user may see: modules hidden when their custody stage does not support them.
 export function moduleAvailable(region, modId) {

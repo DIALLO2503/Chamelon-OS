@@ -7,3 +7,4 @@ deliverables/
 reports/
 research_notes/
 *.zip
+deploy/.env

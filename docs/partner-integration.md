@@ -87,7 +87,9 @@ The sandbox adapter returns `SBX-P-…`/`SBX-C-…` refs and posts a signed `…
 
 `issueOtp(phone, ip)` in `server/auth.js` stores the hashed code, then calls `sendSms` in `server/messaging.js` whenever `SMS_PROVIDER` is set (always in live). The adapter posts to Twilio's Messages API with `TWILIO_ACCOUNT_SID` and `SMS_API_KEY` (the auth token), from `SMS_FROM` or through `TWILIO_MESSAGING_SERVICE_SID`. A refused or timed-out send returns a 502 to the caller. Outside live the code is also returned in the response.
 
-Before a pilot: register the sender in each country (alphanumeric sender IDs need pre-registration in Morocco and Senegal, among others; a messaging service lets Twilio pick the right sender per destination), and check the per-message price per country, since login codes are the main recurring messaging cost.
+`SMS_PROVIDER=smsgate` sends instead through Android phones running SMS Gateway for Android, one per country, with no provider account ([pilot.md](pilot.md)): right for a pilot, not for volume.
+
+With Twilio, before a pilot: register the sender in each country (alphanumeric sender IDs need pre-registration in Morocco and Senegal, among others; a messaging service lets Twilio pick the right sender per destination), and check the per-message price per country, since login codes are the main recurring messaging cost.
 
 ## Notification hook
 

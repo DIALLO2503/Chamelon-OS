@@ -45,7 +45,11 @@ const partnerProvider = {
   async collect(op) { const r = await this.call('/collections', { reference: op.id, amount: op.amount, currency: op.currency, phone: op.phone }); return { providerRef: r.id } },
 }
 
-export const provider = config.provider === 'partner' ? partnerProvider : sandboxProvider
+// A "record"-only pilot has no partner: nothing should reach this, and if something does it fails loudly in the outbox.
+const refuse = () => { throw new Error('No payment partner is configured (PAYMENT_PROVIDER=none)') }
+const noProvider = { name: 'none', payout: refuse, collect: refuse }
+
+export const provider = config.provider === 'partner' ? partnerProvider : config.provider === 'none' ? noProvider : sandboxProvider
 
 /* ---------------- payouts and collections ---------------- */
 

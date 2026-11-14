@@ -35,3 +35,11 @@ jobs:
       - run: npm ci
       - run: npm test
       - run: npm run build
+
+  image:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - run: docker build -t nexus .
+      - run: docker compose -f deploy/docker-compose.yml --env-file deploy/.env.example config --quiet

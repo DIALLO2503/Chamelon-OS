@@ -2,6 +2,8 @@
 
 For the founder or the first ops hire. Related: [money.md](money.md), [security.md](security.md), [partner-integration.md](partner-integration.md), [api.md](api.md) (admin section).
 
+For the two-country pilot on a single server, follow [pilot.md](pilot.md).
+
 ## Deployment shape
 
 - One Node 20.9+ process: `NEXUS_ENV=live node server/index.js` after `npm ci && npm run build`. It serves `/api` and the built PWA from `dist/` (any non-API `GET` returns `dist/index.html`).

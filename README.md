@@ -13,7 +13,7 @@ Sandbox only. No licence and no payment partner are signed. Everything external 
 | Piece | In sandbox | Where the live version plugs in |
 |---|---|---|
 | Payment partner (collections, payouts, custody) | Simulated; settles by signed webhook about 0.4 s later | `server/rails.js` (`partnerProvider`) |
-| Login codes (SMS) | Returned to the client and shown on screen | `server/messaging.js` (Twilio), called by `issueOtp`: implemented, tested against a stand-in, not yet against a real account |
+| Login codes (SMS) | Returned to the client and shown on screen | `server/messaging.js`, called by `issueOtp`: an Android phone gateway or Twilio; tested against stand-ins, not yet against a real phone or account |
 | WhatsApp/SMS notifications | Written to the log; the in-app inbox works | `server/messaging.js` (Twilio), called by the outbox: same status; WhatsApp templates still need Meta approval |
 | Identity checks | One tap (`wallet.verify`), or an admin sets the level | Partner or KYC vendor writing `users.kyc_level` |
 | FX rates and fees | Static values in `server/catalog.js` | Partner quotes |
@@ -37,7 +37,7 @@ npm run seed                     # migrates, then creates 19 demo accounts (PIN 
 npm run build                    # builds the PWA into dist/
 npm run server                   # http://localhost:3001 (serves dist/ and /api)
 
-# 3. Tests (43, end to end, against nexus_test; the schema is dropped and recreated)
+# 3. Tests (48, end to end, against nexus_test; the schema is dropped and recreated)
 npm test
 ```
 
@@ -88,11 +88,14 @@ All variables are read in `server/config.js` (plus `CUSTODY_<ID>` in `server/cat
 | `PUBLIC_URL` | `http://localhost:<PORT>` | Base of links sent by WhatsApp (`/l/<token>`). |
 | `TRUST_PROXY` | `0` | Number of proxy hops, so rate limits see real client IPs. |
 | `UPLOAD_DIR` | `.local/uploads` | Where re-encoded photos are written. |
-| `PAYMENT_PROVIDER` | `sandbox` (`partner` in live) | Live refuses anything but `partner`. |
+| `PAYMENT_PROVIDER` | `sandbox` (`partner` in live) | Live accepts `partner`, or `none` when every country open to sign-up is in `record` custody. |
+| `SIGNUP_REGIONS` | all countries | Comma-separated country ids (`MA,GN`) where sign-up is offered. Existing accounts elsewhere keep working. |
 | `PARTNER_BASE_URL`, `PARTNER_API_KEY`, `PARTNER_WEBHOOK_SECRET` | webhook secret `sandbox-webhook-secret` outside live | Partner API and webhook HMAC secret. All three required in live. |
-| `SMS_PROVIDER`, `SMS_API_KEY`, `TWILIO_ACCOUNT_SID` | none | `SMS_PROVIDER` must be `twilio`; `SMS_API_KEY` is the Twilio auth token. Required in live. When set outside live, login codes are sent by SMS as well as shown on screen. |
+| `SMS_PROVIDER` | none | `smsgate` (Android phones as SMS gateways) or `twilio`. Required in live. |
+| `SMSGATE_<ID>_USER`, `SMSGATE_<ID>_PASSWORD`, `SMSGATE_USER`, `SMSGATE_PASSWORD` | none | With `smsgate`: the credentials of the phone that sends for country `<ID>`, and optionally of a default phone for every other number. `SMSGATE_BASE_URL` overrides the relay. |
+| `SMS_API_KEY`, `TWILIO_ACCOUNT_SID` | none | With `twilio`: `SMS_API_KEY` is the auth token. When set outside live, login codes are sent by SMS as well as shown on screen. |
 | `SMS_FROM` or `TWILIO_MESSAGING_SERVICE_SID` | none | SMS sender: a number or alphanumeric ID, or a messaging service that picks the sender per country. One is required with `SMS_PROVIDER`. |
-| `NOTIFIER` | `log` (`whatsapp` in live) | `log` writes messages to the log (refused in live). `sms` sends every message by SMS. `whatsapp` sends approved templates on WhatsApp and the rest by SMS. |
+| `NOTIFIER` | `log` (in live: `whatsapp` with Twilio, else `sms`) | `log` writes messages to the log (refused in live). `sms` sends every message by SMS. `whatsapp` sends approved templates on WhatsApp and the rest by SMS. |
 | `WHATSAPP_FROM`, `WHATSAPP_TEMPLATES` | none | WhatsApp sender number (required with `NOTIFIER=whatsapp`) and a JSON object mapping notification template names to Twilio Content SIDs. |
 | `TWILIO_BASE_URL` | `https://api.twilio.com` | Override for tests. |
 | `PIN_RESET_HOLD_HOURS` | `24` | How long money actions wait after a forgotten secret code is replaced. |
@@ -113,7 +116,8 @@ All variables are read in `server/config.js` (plus `CUSTODY_<ID>` in `server/cat
 | [docs/security.md](docs/security.md) | Threat model, controls, data protection, known gaps |
 | [docs/operations.md](docs/operations.md) | Running a pilot, scheduler, runbooks |
 | [docs/partner-integration.md](docs/partner-integration.md) | Go-live checklist for a licensed partner |
-| [docs/testing.md](docs/testing.md) | What the 43 tests prove and how to add one |
+| [docs/pilot.md](docs/pilot.md) | Running the two-country pilot on one server, with phones as SMS gateways and no payment partner |
+| [docs/testing.md](docs/testing.md) | What the 48 tests prove and how to add one |
 | [docs/glossary.md](docs/glossary.md) | Product and domain terms |
 
 ## Layout

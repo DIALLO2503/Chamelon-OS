@@ -19,7 +19,7 @@ Related: [api.md](api.md), [architecture.md](architecture.md#design-decisions), 
 
 - `NEXUS_ENV` must be `sandbox`, `test` or `live`; otherwise the process throws at import.
 - `config.sandbox` is true for anything but `live`.
-- In `live`: `JWT_SECRET`, `LINK_SECRET`, `DATABASE_URL` are required (no generated secrets); `PAYMENT_PROVIDER` must be `partner` with `PARTNER_BASE_URL`, `PARTNER_API_KEY`, `PARTNER_WEBHOOK_SECRET`; `SMS_PROVIDER` must be set and `NOTIFIER` must be `sms` or `whatsapp`.
+- In `live`: `JWT_SECRET`, `LINK_SECRET`, `DATABASE_URL` are required (no generated secrets); `PAYMENT_PROVIDER` must be `partner` with `PARTNER_BASE_URL`, `PARTNER_API_KEY`, `PARTNER_WEBHOOK_SECRET`, or `none` if every country open to sign-up (`SIGNUP_REGIONS`) is in `record` custody; `SMS_PROVIDER` must be set and `NOTIFIER` must be `sms` or `whatsapp`.
 - Whenever a messaging configuration is given, in any environment, it is validated at import: `SMS_PROVIDER=twilio` needs `TWILIO_ACCOUNT_SID`, `SMS_API_KEY` and a sender (`SMS_FROM` or `TWILIO_MESSAGING_SERVICE_SID`); a `NOTIFIER` other than `log` needs `SMS_PROVIDER`; `NOTIFIER=whatsapp` needs `WHATSAPP_FROM`.
 - Outside live, secrets are generated once into `.local/` (mode 0600, git-ignored) and the webhook secret is the public constant `sandbox-webhook-secret`.
 - Only outside live: login codes are returned in API responses, `GET /api/config/sandbox` lists users, `wallet.verify` raises KYC in one tap, the simulated partner settles everything, and `server/seed.js` runs (it refuses any other env).
@@ -133,7 +133,7 @@ Not handled: erasure (postings and entries are append-only by trigger and hold f
 Stated plainly.
 
 **Still open:**
-1. SMS and WhatsApp sending (`server/messaging.js`) is tested only against a local stand-in for Twilio: no real account, sender registration or approved WhatsApp template exists yet. No opt-in or opt-out is recorded for WhatsApp recipients, and a retried `notify.send` can deliver the same message twice if the process dies between the send and the status update.
+1. SMS and WhatsApp sending (`server/messaging.js`) is tested only against local stand-ins: no real Twilio account, gateway phone, sender registration or approved WhatsApp template exists yet. With `SMS_PROVIDER=smsgate`, login codes transit the gateway project's relay in clear, and an accepted request means queued on the phone, not delivered ([pilot.md](pilot.md)). No opt-in or opt-out is recorded for WhatsApp recipients, and a retried `notify.send` can deliver the same message twice if the process dies between the send and the status update.
 2. The coverage check is implied by the ledger's zero-sum rule and does not compare with the partner's actual balance ([money.md](money.md#reconciliation-and-coverage)).
 
 **Fixed after the first documentation pass** (each has a regression test in `server/test/fixes.test.js`):
