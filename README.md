@@ -37,7 +37,7 @@ npm run seed                     # migrates, then creates 19 demo accounts (PIN 
 npm run build                    # builds the PWA into dist/
 npm run server                   # http://localhost:3001 (serves dist/ and /api)
 
-# 3. Tests (27, end to end, against nexus_test; the schema is dropped and recreated)
+# 3. Tests (36, end to end, against nexus_test; the schema is dropped and recreated)
 npm test
 ```
 
@@ -109,7 +109,7 @@ All variables are read in `server/config.js` (plus `CUSTODY_<ID>` in `server/cat
 | [docs/security.md](docs/security.md) | Threat model, controls, data protection, known gaps |
 | [docs/operations.md](docs/operations.md) | Running a pilot, scheduler, runbooks |
 | [docs/partner-integration.md](docs/partner-integration.md) | Go-live checklist for a licensed partner |
-| [docs/testing.md](docs/testing.md) | What the 27 tests prove and how to add one |
+| [docs/testing.md](docs/testing.md) | What the 36 tests prove and how to add one |
 | [docs/glossary.md](docs/glossary.md) | Product and domain terms |
 
 ## Layout
