@@ -9,7 +9,7 @@ import { audit, partyById } from './context.js'
 import { resolveLink, notify } from './rails.js'
 import { issueOtp, consumeOtp } from './auth.js'
 import { settleRecorded, recordPayment, regionOfPhone } from './modules/shared.js'
-import { loadEscrow, fundByCollection, releaseEscrow, openDispute } from './modules/escrow.js'
+import { loadEscrow, fundByCollection, releaseEscrow, openDispute, addEvidence, evidenceFields, EVIDENCE_ACTION, EVIDENCE_DONE } from './modules/escrow.js'
 import { stagesOf, jobOps } from './modules/jobs.js'
 import { orderOps } from './modules/commerce.js'
 import { tontineOps, membersOf } from './modules/tontine.js'
@@ -18,6 +18,7 @@ import { owedBy } from './modules/commerce.js'
 const f = (amount, code) => money(amount, code)
 const pseudoCtx = (client, party) => ({ client, party, user: { name: party.name } })
 const act = (id, label, { otp = true, fields = [], tone } = {}) => ({ id, label, otp, fields, tone })
+const evidenceAct = () => act(EVIDENCE_ACTION.id, EVIDENCE_ACTION.label, { fields: evidenceFields() })
 const phoneInput = (label = 'Votre numéro mobile money') => ({ name: 'phone', label, type: 'tel' })
 
 /* Each kind: view(client, link, party) → { title, lines, status, actions }, and handlers keyed by action id. */
@@ -43,6 +44,7 @@ const KINDS = {
         if (e.status === 'requested') actions.push(e.mode === 'held' ? act('pay', 'Payer et bloquer les fonds', { otp: false, fields: [phoneInput()], tone: 'primary' }) : act('claimPaid', 'J’ai payé', { tone: 'primary' }))
         if (e.status === 'held') actions.push(act('release', 'Libérer les fonds', { tone: 'primary' }), act('dispute', 'Signaler un problème', { fields: [{ name: 'reason', label: 'Que s’est-il passé ?', type: 'text' }] }))
       }
+      if (e.status === 'disputed' && [e.payer_party, e.payee_party].includes(party.id)) actions.push(evidenceAct())
       return { title: e.title, lines: [['Pour', mask(payee.name)], ['Montant', f(e.amount, e.currency)], ['Protection', e.mode === 'held' ? 'L’argent reste bloqué et n’est versé qu’avec votre accord' : `Payez directement ${mask(payee.name)}, puis signalez-le ici`]],
         status: { requested: 'En attente de paiement', claimed: 'Paiement signalé', held: 'Fonds bloqués', released: 'Versé', paid: 'Payé', refunded: 'Remboursé', cancelled: 'Annulé', disputed: 'Litige en cours' }[e.status], actions }
     },
@@ -56,6 +58,7 @@ const KINDS = {
     },
     async release(c, link, party) { const e = await loadEscrow(c, link.ref_id); if (e.payer_party !== party.id) fail('Action non autorisée', 403); await releaseEscrow(c, e); return 'Fonds versés' },
     async dispute(c, link, party, input) { const e = await loadEscrow(c, link.ref_id); if (e.payer_party !== party.id) fail('Action non autorisée', 403); await openDispute(c, e, party, String(input.reason ?? '').slice(0, 300) || 'Sans précision'); return 'Litige ouvert. Les fonds restent bloqués.' },
+    async evidence(c, link, party, input) { await addEvidence(c, await loadEscrow(c, link.ref_id), party, input); return EVIDENCE_DONE },
   },
 
   job: {
@@ -76,11 +79,18 @@ const KINDS = {
         if (job.mode === 'recorded' && cur.status === 'validated') actions.push(act('claimPaid', 'J’ai payé l’artisan', { tone: 'primary' }))
         if (job.mode === 'held' && ['funded', 'done'].includes(cur.status)) actions.push(act('dispute', 'Signaler un problème', { fields: [{ name: 'reason', label: 'Que s’est-il passé ?', type: 'text' }] }))
       }
+      if (cur?.status === 'disputed' && role) actions.push(evidenceAct())
       const label = { planned: 'à venir', requested: 'financement demandé', funded: 'financée', done: 'terminée, à valider', validated: 'validée, à payer', claimed: 'paiement signalé', paid: 'payée', disputed: 'litige' }
       return { title: job.title, lines: [[role === 'artisan' ? 'Client' : 'Artisan', mask(other.name)], ...stages.map(s => [`Étape ${s.position} · ${s.title}`, `${f(s.amount, job.currency)} · ${label[s.status]}${s.proof.length ? ` · ${s.proof.length} photo(s)` : ''}`])],
         status: cur ? `Étape ${cur.position} en cours` : 'Chantier terminé', actions, proof: cur?.proof ?? [] }
     },
     request: async (c, link, party) => { await jobOps.requestFunding(c, link.ref_id, party); return 'Demande envoyée. Le client reçoit un lien pour payer l’étape.' },
+    async evidence(c, link, party, input) {
+      const stage = (await stagesOf(c, link.ref_id)).find(s => s.status === 'disputed')
+      if (!stage) fail('Aucun litige en cours sur ce chantier', 409)
+      await addEvidence(c, await loadEscrow(c, stage.escrow_id), party, input)
+      return EVIDENCE_DONE
+    },
     markDone: async (c, link, party, input) => { await jobOps.markDone(c, link.ref_id, party, input.proof || null); return 'Étape signalée terminée. Le client est prévenu.' },
     async markReceived(c, link, party) {
       const stage = (await stagesOf(c, link.ref_id)).find(s => ['validated', 'claimed'].includes(s.status))
@@ -137,6 +147,7 @@ const KINDS = {
       const actions = []
       if (o.status === 'pending') actions.push(o.mode === 'held' ? act('pay', 'Payer par mobile money', { otp: false, tone: 'primary', fields: [phoneInput()] }) : act('claimPaid', 'J’ai payé', { otp: false, tone: 'primary', fields: [phoneInput('Le numéro qui a payé')] }))
       if (o.status === 'delivered' && isBuyer) actions.push(act('confirmReceived', 'J’ai bien reçu ma commande', { tone: 'primary' }))
+      if (o.status === 'disputed' && isBuyer) actions.push(evidenceAct())
       if (['paid', 'delivered'].includes(o.status) && isBuyer && o.mode === 'held') actions.push(act('dispute', 'Signaler un problème', { fields: [{ name: 'reason', label: 'Que s’est-il passé ?', type: 'text' }] }))
       return { title: o.item, lines: [['Vendeuse', mask(o.seller_name)], ['Prix', f(o.amount, o.currency)],
         o.mode === 'held' ? ['Protection', 'Votre argent est versé à la vendeuse seulement quand vous confirmez la réception'] : ['Comment payer', `Payez directement au ${o.seller_phone} (Wave, Orange Money…), puis appuyez sur « J’ai payé »`]],
@@ -145,6 +156,7 @@ const KINDS = {
     pay: async (c, link, party, input) => { await orderOps.payByCollection(c, link.ref_id, input.phone); return 'Validez le paiement sur votre téléphone.' },
     claimPaid: async (c, link, party, input) => { await orderOps.claimPaid(c, link.ref_id, input.phone); return 'Paiement signalé. La vendeuse doit confirmer.' },
     confirmReceived: async (c, link, party) => { await orderOps.confirmReceived(c, link.ref_id, party); return 'Merci ! Le paiement est versé à la vendeuse.' },
+    evidence: async (c, link, party, input) => { await orderOps.evidence(c, link.ref_id, party, input); return EVIDENCE_DONE },
     dispute: async (c, link, party, input) => { await orderOps.dispute(c, link.ref_id, party, String(input.reason ?? '').slice(0, 300) || 'Sans précision'); return 'Litige ouvert. L’argent reste bloqué.' },
   },
 

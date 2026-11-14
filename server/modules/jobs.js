@@ -5,7 +5,7 @@ import { rowsBlock, partyById, userById } from '../context.js'
 import { notify, createLink, shareFor } from '../rails.js'
 import { amountField, phoneField, textField, destinationOf, assertCorridor, recordPayment } from './shared.js'
 import { REGIONS } from '../catalog.js'
-import escrowModule, { createRequest, fundPlan, releaseEscrow, openDispute, loadEscrow, escrowHooks, modeFor } from './escrow.js'
+import escrowModule, { createRequest, fundPlan, releaseEscrow, openDispute, loadEscrow, escrowHooks, modeFor, addEvidence, evidenceForm, EVIDENCE_ACTION, EVIDENCE_DONE } from './escrow.js'
 
 const mine = ctx => all(ctx.client, 'SELECT * FROM jobs WHERE artisan_party=$1 OR client_party=$1 ORDER BY created_at DESC', [ctx.party.id])
 export const stagesOf = (client, jobId) => all(client, 'SELECT * FROM job_stages WHERE job_id=$1 ORDER BY position', [jobId])
@@ -36,7 +36,7 @@ export async function jobRow(client, job, party) {
   if (!stage) return { ...base, sub: `${mask(other.name)} · ${stages.length} étapes payées`, status: 'Terminé', tone: 'ok' }
   const [status, tone] = LABELS[job.mode][stage.status] ?? ['', '']
   const next = NEXT[job.mode][role]?.[stage.status]
-  const actions = [next, ...(job.mode === 'held' && ['funded', 'done'].includes(stage.status) ? [{ id: 'dispute', label: 'Litige' }] : []), { id: 'share', label: 'Lien pour ' + (role === 'artisan' ? 'le client' : 'l’artisan') }].filter(Boolean)
+  const actions = [next, ...(job.mode === 'held' && ['funded', 'done'].includes(stage.status) ? [{ id: 'dispute', label: 'Litige' }] : []), ...(stage.status === 'disputed' ? [EVIDENCE_ACTION] : []), { id: 'share', label: 'Lien pour ' + (role === 'artisan' ? 'le client' : 'l’artisan') }].filter(Boolean)
   const proofs = stage.proof.length ? ` · ${stage.proof.length} photo${stage.proof.length > 1 ? 's' : ''}` : ''
   return { ...base, sub: `${mask(other.name)} · étape ${stage.position}/${stages.length} : ${stage.title} (${money(stage.amount, job.currency)})${proofs}`, status, tone, actions, proof: stage.proof }
 }
@@ -224,6 +224,17 @@ export default {
         const { stage } = await step(ctx.client, jobId, ctx.party, role, ['funded', 'done'])
         await openDispute(ctx.client, await loadEscrow(ctx.client, stage.escrow_id), ctx.party, input.reason)
         return { message: 'Litige ouvert. Les fonds restent bloqués.' }
+      },
+    },
+    evidence: {
+      label: EVIDENCE_ACTION.label, form: evidenceForm,
+      async run(ctx, input, jobId) {
+        const job = await one(ctx.client, 'SELECT * FROM jobs WHERE id=$1', [jobId])
+        const role = job && roleOf(job, ctx.party)
+        if (!role) fail('Action non autorisée', 403)
+        const { stage } = await step(ctx.client, jobId, ctx.party, role, 'disputed')
+        await addEvidence(ctx.client, await loadEscrow(ctx.client, stage.escrow_id), ctx.party, input)
+        return { message: EVIDENCE_DONE }
       },
     },
     share: {

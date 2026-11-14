@@ -94,7 +94,7 @@ adminRoutes.get('/disputes/:id', async (req, res) => {
   const e = await loadEscrow(pool, d.escrow_id)
   const [payer, payee] = await Promise.all([partyById(pool, e.payer_party), partyById(pool, e.payee_party)])
   const stage = e.stage_id ? await one(pool, 'SELECT * FROM job_stages WHERE id=$1', [e.stage_id]) : null
-  const evidence = await all(pool, 'SELECT * FROM dispute_evidence WHERE dispute_id=$1 ORDER BY created_at', [d.id])
+  const evidence = await all(pool, 'SELECT ev.*, p.name AS party_name FROM dispute_evidence ev JOIN parties p ON p.id=ev.party_id WHERE ev.dispute_id=$1 ORDER BY ev.created_at', [d.id])
   res.json({ dispute: d, escrow: { ...e, amountText: money(e.amount, e.currency) }, payer, payee, stage, evidence })
 })
 

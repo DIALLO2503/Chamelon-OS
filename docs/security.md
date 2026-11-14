@@ -133,8 +133,7 @@ Stated plainly.
 
 **Still open:**
 1. SMS and WhatsApp sending (`server/messaging.js`) is tested only against a local stand-in for Twilio: no real account, sender registration or approved WhatsApp template exists yet. No opt-in or opt-out is recorded for WhatsApp recipients, and a retried `notify.send` can deliver the same message twice if the process dies between the send and the status update.
-2. `dispute_evidence` is read but nothing writes it: there is no way to add evidence to a dispute.
-3. The coverage check is implied by the ledger's zero-sum rule and does not compare with the partner's actual balance ([money.md](money.md#reconciliation-and-coverage)).
+2. The coverage check is implied by the ledger's zero-sum rule and does not compare with the partner's actual balance ([money.md](money.md#reconciliation-and-coverage)).
 
 **Fixed after the first documentation pass** (each has a regression test in `server/test/fixes.test.js`):
 - A refused recorded payment returns its escrow, job stage, order or tontine contribution to the unpaid state (`onRecordedRejected` hooks), so it can be reported again.
@@ -148,6 +147,8 @@ Stated plainly.
 - Outbox jobs hold a five-minute lease while `running`; a job left behind by a crash runs again.
 - Malformed JSON gets the French "Requête invalide".
 - `escrow.refund` and `orders.refund` are money actions: quote first, PIN to confirm.
+- Either side of an open dispute can add evidence (a statement of up to 500 characters, a photo, or both; 10 pieces per side): action `evidence` on the escrow, job or order in the app, and on the public link behind a login code. A photo must have been uploaded by the same person. Evidence closes when the dispute is resolved.
+- Photos are served again: with the default `UPLOAD_DIR` (`.local/uploads`) every `GET /api/uploads/:id` answered 404, because Express refuses a bare absolute path containing a dot-segment.
 
 **Not implemented:** sanctions/PEP screening, transaction monitoring and suspicious-activity reporting, partner statement reconciliation, catalog versioning, PIN reset, device binding, CSV export for regulators, CI, backups, metrics and error tracking, i18n, link revocation UI.
 

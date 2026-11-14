@@ -4,7 +4,7 @@ import { fail, newId, today, ago, money, mask, longDate } from '../core.js'
 import { rowsBlock, partyById, partyByPhone } from '../context.js'
 import { notify, createLink, shareFor, startPayout, startCollection, collectionHandlers, payoutHandlers } from '../rails.js'
 import { amountField, phoneField, textField, code10, regionOfPhone, recordPayment, settleRecorded, onRecordedConfirmed, onRecordedRejected, returnCollection } from './shared.js'
-import { createRequest, fundPlan, loadEscrow, releaseEscrow, refundEscrow, openDispute, escrowHooks } from './escrow.js'
+import { createRequest, fundPlan, loadEscrow, releaseEscrow, refundEscrow, openDispute, escrowHooks, addEvidence, evidenceForm, EVIDENCE_ACTION, EVIDENCE_DONE } from './escrow.js'
 
 const owned = table => async (ctx, id, status) => {
   const r = await one(ctx.client, `SELECT * FROM ${table} WHERE id=$1 AND ${table === 'orders' ? 'seller_id' : 'user_id'}=$2`, [id, ctx.user.id])
@@ -86,6 +86,12 @@ export const orderOps = {
     if (o.mode === 'held') await releaseEscrow(client, await loadEscrow(client, o.escrow_id), 'Commande reçue')
     else await client.query(`UPDATE orders SET status='completed' WHERE id=$1`, [o.id])
   },
+  // Buyer or seller adds evidence to the dispute on a protected order.
+  async evidence(client, orderId, party, input) {
+    const o = await one(client, 'SELECT * FROM orders WHERE id=$1', [orderId])
+    if (!o || o.status !== 'disputed' || !o.escrow_id) fail('Aucun litige en cours sur cette commande', 409)
+    await addEvidence(client, await loadEscrow(client, o.escrow_id), party, input)
+  },
   async dispute(client, orderId, buyerParty, reason) {
     const o = await one(client, 'SELECT * FROM orders WHERE id=$1', [orderId])
     if (!o || o.buyer_party !== buyerParty.id || o.mode !== 'held') fail('Action non autorisée', 403)
@@ -100,7 +106,7 @@ const orderRow = (ctx, o) => {
     claimed: ['Paiement signalé', 'wait', [{ id: 'confirmPaid', label: 'Confirmer le paiement', tone: 'primary' }]],
     paid: [held ? 'Payé, protégé' : 'Payé', 'ok', [{ id: 'deliver', label: 'Marquer livré', tone: 'primary' }, ...(held ? [{ id: 'refund', label: 'Rembourser' }] : [])]],
     delivered: [held ? 'Livré, en attente de confirmation' : 'Livré', 'ok', held ? [] : [{ id: 'complete', label: 'Terminer' }]],
-    completed: ['Terminé', 'ok', []], disputed: ['Litige', 'bad', []], refunded: ['Remboursé', '', []], cancelled: ['Annulé', '', []],
+    completed: ['Terminé', 'ok', []], disputed: ['Litige', 'bad', [EVIDENCE_ACTION]], refunded: ['Remboursé', '', []], cancelled: ['Annulé', '', []],
   }
   const [status, tone, actions] = map[o.status]
   return { id: o.id, title: o.item, sub: `${o.customer_name} · ${o.status === 'pending' ? `code ${o.code}` : ago(o.created_at).toLowerCase()}`, value: ctx.f(o.amount), status, tone, actions }
@@ -125,6 +131,10 @@ export const orders = {
     },
   },
   actions: {
+    evidence: {
+      label: EVIDENCE_ACTION.label, form: evidenceForm,
+      async run(ctx, input, id) { await orderOps.evidence(ctx.client, (await owned('orders')(ctx, id, 'disputed')).id, ctx.party, input); return { message: EVIDENCE_DONE } },
+    },
     create: {
       label: 'Demande de paiement', icon: 'link',
       form: ctx => ({ title: 'Nouvelle demande de paiement', info: ctx.held ? 'Votre cliente paie depuis son mobile money, sans application. L’argent est protégé et vous est versé à la livraison confirmée (ou automatiquement après 72 h).' : 'Votre cliente vous paie directement et le signale sur le lien ; vous confirmez la réception.',

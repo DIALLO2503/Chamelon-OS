@@ -7,12 +7,12 @@ Related: [money.md](money.md), [partner-integration.md](partner-integration.md).
 - Runner: Node's built-in `node:test`, no framework. `npm test` runs `node --test --test-concurrency=1 server/test/money.test.js server/test/flows.test.js server/test/fixes.test.js`.
 - `server/test/money.test.js` (14 tests): ledger, quotes, idempotency, limits, corridors, webhooks, concurrency, catalog.
 - `server/test/flows.test.js` (13 tests): end-to-end journeys, several over real HTTP (the Express `app` on a random port) including public links.
-- `server/test/fixes.test.js` (9 tests): regression tests for the issues fixed after the first documentation pass ([security.md](security.md#known-gaps-and-non-goals)).
+- `server/test/fixes.test.js` (10 tests): regression tests for the issues fixed after the first documentation pass ([security.md](security.md#known-gaps-and-non-goals)).
 - `server/test/messaging.test.js` (5 tests): SMS login codes and WhatsApp/SMS notifications against a local HTTP stand-in for Twilio's Messages API (request shape, credentials, provider failure, SMS fallback, outbox retry).
 - `server/test/helpers.js` sets `NEXUS_ENV=test` before importing anything, so tests use `postgres://nexus:nexus@localhost:5432/nexus_test` unless `DATABASE_URL` is set. Each file starts with `resetDb()`: **`DROP SCHEMA public CASCADE`**, then migrations. Never run tests with `DATABASE_URL` pointing at real data.
 - In `test`, rate limits are effectively off, OTP caps are the live ones (5 sends, 10 failures a day), logs are silent, and the sandbox partner does not auto-settle: tests settle explicitly.
 
-Expected result: `# tests 41`, `# pass 41`.
+Expected result: `# tests 42`, `# pass 42`.
 
 ## Helpers
 
@@ -85,7 +85,7 @@ The pattern matches test names. Each file resets the database, so run one file a
 - The frontend (no component or browser tests; Playwright is installed but unused for the app).
 - Load and performance, multi-process scheduler and outbox behaviour.
 - A real partner; a real Twilio account (the messaging tests use a local stand-in, so delivery, sender registration and WhatsApp template approval are unverified); live mode boot.
-- Upload re-encoding and access rules; most admin endpoints (users, KYC, roles, outbox retry, audit); link expiry; PIN lockout; the reconciliation alert path.
+- Upload re-encoding and most upload access rules (only dispute evidence photos are covered); most admin endpoints (users, KYC, roles, outbox retry, audit); link expiry; PIN lockout; the reconciliation alert path.
 - The gaps listed in [security.md](security.md#known-gaps-and-non-goals).
 
 ## Adding a test for a new action

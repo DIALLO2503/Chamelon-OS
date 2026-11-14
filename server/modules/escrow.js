@@ -132,6 +132,34 @@ export async function openDispute(client, e, party, reason) {
   await hook(client, updated, 'disputed')
 }
 
+// Either side of an open dispute adds a written statement, a photo, or both; admins read them before deciding.
+// A photo must have been uploaded by the same person (from the app, or from one of their links).
+const EVIDENCE_MAX = 10
+export const evidenceFields = () => [
+  { name: 'text', label: 'Votre explication', type: 'text', max: 500, required: false },
+  { name: 'photo', label: 'Photo (reçu, colis, chantier…)', type: 'upload', required: false },
+]
+export async function addEvidence(client, e, party, input = {}) {
+  if (!e || (e.payer_party !== party.id && e.payee_party !== party.id)) fail('Action non autorisée', 403)
+  const d = e.status === 'disputed' && await one(client, `SELECT * FROM disputes WHERE escrow_id=$1 AND status <> 'resolved' ORDER BY created_at DESC LIMIT 1 FOR UPDATE`, [e.id])
+  if (!d) fail('Aucun litige en cours sur ce paiement', 409)
+  const text = String(input.text ?? '').trim().slice(0, 500) || null
+  const uploadId = input.photo ? String(input.photo) : null
+  if (!text && !uploadId) fail('Ajoutez une explication ou une photo')
+  if (uploadId) {
+    const own = /^[0-9a-f-]{36}$/.test(uploadId) && await one(client, `SELECT 1 FROM uploads u WHERE u.id=$1 AND (
+      (u.owner_type='user' AND u.owner_id=$2) OR (u.owner_type='link' AND u.owner_id IN (SELECT id::text FROM links WHERE party_id=$3)))`, [uploadId, party.user_id ?? '', party.id])
+    if (!own) fail('Photo introuvable', 404)
+  }
+  const { n } = await one(client, 'SELECT count(*)::int AS n FROM dispute_evidence WHERE dispute_id=$1 AND party_id=$2', [d.id, party.id])
+  if (n >= EVIDENCE_MAX) fail(`Vous avez déjà envoyé ${EVIDENCE_MAX} pièces pour ce litige`, 409)
+  await client.query('INSERT INTO dispute_evidence (id, dispute_id, party_id, text, upload_id) VALUES ($1,$2,$3,$4,$5)', [newId(), d.id, party.id, text, uploadId])
+}
+export const EVIDENCE_ACTION = { id: 'evidence', label: 'Ajouter une preuve' }
+const EVIDENCE_FORM = { title: 'Ajouter une preuve', info: 'Notre équipe lit les explications et les photos des deux côtés avant de décider. L’autre personne peut les voir.' }
+export const evidenceForm = () => ({ ...EVIDENCE_FORM, fields: evidenceFields() })
+export const EVIDENCE_DONE = 'Preuve ajoutée au dossier.'
+
 onRecordedRejected.escrow = async (client, id) => {
   const e = await one(client, 'SELECT * FROM escrows WHERE id=$1', [id])
   if (e?.status !== 'claimed') return
@@ -153,7 +181,7 @@ async function row(ctx, e) {
       : ['Demandé', 'wait', held ? [{ id: 'cancel', label: 'Annuler' }, { id: 'share', label: 'Renvoyer le lien' }] : [{ id: 'markReceived', label: 'Paiement reçu', tone: 'primary' }, { id: 'share', label: 'Renvoyer le lien' }]],
     claimed: payer ? ['Paiement signalé', 'wait', []] : ['À confirmer', 'wait', [{ id: 'markReceived', label: 'Confirmer la réception', tone: 'primary' }]],
     held: payer ? ['Bloqué', 'ok', [{ id: 'release', label: 'Libérer', tone: 'primary' }, { id: 'dispute', label: 'Litige' }]] : ['Bloqué pour vous', 'ok', [{ id: 'refund', label: 'Rembourser' }, { id: 'dispute', label: 'Litige' }]],
-    disputed: ['Litige en cours', 'bad', []], released: ['Libéré', 'ok', []], paid: ['Payé et confirmé', 'ok', []], refunded: ['Remboursé', '', []], cancelled: ['Annulé', '', []],
+    disputed: ['Litige en cours', 'bad', [EVIDENCE_ACTION]], released: ['Libéré', 'ok', []], paid: ['Payé et confirmé', 'ok', []], refunded: ['Remboursé', '', []], cancelled: ['Annulé', '', []],
   }
   const [status, tone, actions] = map[e.status]
   const auto = e.auto_release_at && e.status === 'held' ? ` · versement automatique le ${new Date(e.auto_release_at).toLocaleDateString('fr-FR')}` : ''
@@ -269,6 +297,10 @@ export default {
     dispute: {
       label: 'Litige', form: () => ({ title: 'Signaler un litige', info: 'Les fonds restent bloqués. Notre équipe examine les preuves des deux côtés et décide sous 5 jours ouvrés.', fields: [textField('reason', 'Que s’est-il passé ?', { max: 300 })] }),
       async run(ctx, input, id) { await openDispute(ctx.client, await escrowFor(ctx, id, { status: 'held' }), ctx.party, input.reason); return { message: 'Litige ouvert. Les fonds restent bloqués.' } },
+    },
+    evidence: {
+      label: EVIDENCE_ACTION.label, form: evidenceForm,
+      async run(ctx, input, id) { await addEvidence(ctx.client, await escrowFor(ctx, id, { status: 'disputed' }), ctx.party, input); return { message: EVIDENCE_DONE } },
     },
   },
   kept: async (client, partyId) => (await one(client, `SELECT count(*)::int AS n FROM escrows WHERE payee_party=$1 AND status IN ('released','paid')`, [partyId])).n,

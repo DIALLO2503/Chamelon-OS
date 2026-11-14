@@ -146,3 +146,48 @@ test('an outbox job left "running" by a crashed worker is picked up again once i
   await settleAll()
   assert.equal(await bal(u), 500)
 })
+
+test('both sides of a dispute can add evidence, from the app or from a link; nobody else can', async () => {
+  const jwt = (await import('jsonwebtoken')).default, { config } = await import('../config.js'), sharp = (await import('sharp')).default
+  const bearer = async u => {
+    const sid = (await one(pool, `INSERT INTO sessions (id, user_id, refresh_hash) VALUES (gen_random_uuid(), $1, $2) RETURNING id`, [u.id, idem()])).id
+    return { Authorization: `Bearer ${jwt.sign({ sub: u.id, sid, typ: 'access' }, config.jwtSecret, { expiresIn: '5m' })}` }
+  }
+  const png = await sharp({ create: { width: 8, height: 8, channels: 3, background: '#c33' } }).png().toBuffer()
+  const upload = async (path, headers = {}) => (await (await fetch(base + path, { method: 'POST', headers: { 'Content-Type': 'image/png', ...headers }, body: png })).json()).id
+
+  const payer = await user('SN', 'boutique', { fund: 50000 }), outsider = await user('SN', 'boutique')
+  const payeePhone = phone('SN')
+  await act(payer, 'escrow', 'hold', { amount: '20000', phone: payeePhone, name: 'Awa Sarr', title: 'Lot de wax' })
+  const e = await one(pool, 'SELECT * FROM escrows WHERE title=$1', ['Lot de wax'])
+  const token = await linkFor('escrow', e.id, e.payee_party)
+
+  await assert.rejects(act(payer, 'escrow', 'evidence', { text: 'Trop tôt' }, e.id), /plus possible/, 'no evidence before a dispute exists')
+  await act(payer, 'escrow', 'dispute', { reason: 'Tissu abîmé' }, e.id)
+  const d = await one(pool, 'SELECT * FROM disputes WHERE escrow_id=$1', [e.id])
+
+  // The payer, from the app: a statement and a photo they uploaded.
+  const payerPhoto = await upload('/uploads', await bearer(payer))
+  await act(payer, 'escrow', 'evidence', { text: 'Trois pièces sur dix sont déchirées', photo: payerPhoto }, e.id)
+  await assert.rejects(act(payer, 'escrow', 'evidence', {}, e.id), /explication ou une photo/)
+
+  // The payee has no app: photo and statement go through their link, behind a code sent to their phone.
+  const payeePhoto = await upload(`/public/${token}/upload`)
+  assert.equal((await linkAct(token, 'evidence', { text: 'Colis remis intact, photo à la livraison', photo: payeePhoto })).status, 200)
+  assert.equal((await linkAct(token, 'evidence', { photo: payerPhoto })).status, 404, 'a photo uploaded by someone else cannot be attached')
+
+  await assert.rejects(act(outsider, 'escrow', 'evidence', { text: 'Je passe par là' }, e.id), /Introuvable/)
+
+  const rows = await pool.query('SELECT party_id, text, upload_id FROM dispute_evidence WHERE dispute_id=$1 ORDER BY created_at', [d.id])
+  assert.deepEqual(rows.rows, [
+    { party_id: e.payer_party, text: 'Trois pièces sur dix sont déchirées', upload_id: payerPhoto },
+    { party_id: e.payee_party, text: 'Colis remis intact, photo à la livraison', upload_id: payeePhoto },
+  ])
+  // Each side's photo is visible to the other side and to nobody else.
+  const see = async (u, id) => (await fetch(`${base}/uploads/${id}`, { headers: await bearer(u) })).status
+  assert.equal(await see(payer, payeePhoto), 200)
+  assert.equal(await see(outsider, payeePhoto), 404)
+
+  await pool.query(`UPDATE disputes SET status='resolved' WHERE id=$1`, [d.id])
+  await assert.rejects(act(payer, 'escrow', 'evidence', { text: 'Trop tard' }, e.id), /Aucun litige en cours/, 'a resolved dispute takes no more evidence')
+})

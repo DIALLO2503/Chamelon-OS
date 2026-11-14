@@ -199,7 +199,7 @@ function DisputeDetail({ id, onBack }) {
         <p className="info">Motif déclaré : {d.reason}</p>
       </div>
       {stage?.proof?.length > 0 && <section className="sec"><h2>Photos de l’étape</h2><div className="pub-photos">{stage.proof.map(p => <Photo key={p} id={p} />)}</div></section>}
-      {evidence.length > 0 && <section className="sec"><h2>Pièces</h2><div className="card">{evidence.map(ev => <div key={ev.id} className="row">{ev.text}{ev.upload_id && <Photo id={ev.upload_id} />}</div>)}</div></section>}
+      {evidence.length > 0 && <section className="sec"><h2>Pièces</h2><div className="card">{evidence.map(ev => <div key={ev.id} className="row"><strong>{ev.party_name} :</strong> {ev.text}{ev.upload_id && <Photo id={ev.upload_id} />}</div>)}</div></section>}
       {d.proposal && (
         <div className="card adm-proposal">
           <div className="row-title">Proposition : {OUTCOMES[d.proposal.outcome]}{d.proposal.payeeAmount ? ` (${d.proposal.payeeAmount} unités au bénéficiaire)` : ''}</div>

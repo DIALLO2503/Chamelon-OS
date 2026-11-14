@@ -23,6 +23,10 @@ export async function saveImage(body, { ownerType, ownerId, lat, lng }) {
   return { id, meta }
 }
 
+// Served relative to its directory: given a bare absolute path, Express refuses any path with a dot-segment
+// (the default upload directory is .local/uploads) and answers 404.
+const sendImage = (res, u) => res.type('image/jpeg').set('Cache-Control', 'private, max-age=3600').sendFile(path.basename(u.path), { root: path.dirname(u.path) })
+
 const num = v => (v === undefined ? NaN : Number(v))
 
 // An upload is visible to its uploader, to admins, and to both parties of the job stage or dispute it belongs to.
@@ -42,19 +46,19 @@ uploadRoutes.post('/', raw, async (req, res) => res.json(await saveImage(req.bod
 uploadRoutes.get('/:id', async (req, res) => {
   const u = await canSee(req.userId, req.params.id)
   if (!u) fail('Introuvable', 404)
-  res.type('image/jpeg').set('Cache-Control', 'private, max-age=3600').sendFile(u.path)
+  sendImage(res, u)
 })
 
-// Uploads from a public link (for example an artisan without the app sending a site photo).
+// Uploads from a public link (an artisan without the app sending a site photo, or either side adding dispute evidence).
 export const publicUploadRoutes = Router()
 publicUploadRoutes.post('/:token/upload', raw, async (req, res) => {
   const link = await resolveLink(pool, req.params.token)
-  if (link.kind !== 'job') fail('Envoi de photo indisponible pour ce lien', 400)
+  if (!['job', 'escrow', 'order'].includes(link.kind)) fail('Envoi de photo indisponible pour ce lien', 400)
   res.json(await saveImage(req.body, { ownerType: 'link', ownerId: link.id, lat: num(req.query.lat), lng: num(req.query.lng) }))
 })
 publicUploadRoutes.get('/:token/uploads/:id', async (req, res) => {
   const link = await resolveLink(pool, req.params.token)
   const u = link.kind === 'job' && await one(pool, `SELECT up.* FROM uploads up JOIN job_stages s ON up.id = ANY(s.proof) WHERE up.id=$1 AND s.job_id=$2`, [req.params.id, link.ref_id])
   if (!u) fail('Introuvable', 404)
-  res.type('image/jpeg').set('Cache-Control', 'private, max-age=3600').sendFile(u.path)
+  sendImage(res, u)
 })

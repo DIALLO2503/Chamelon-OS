@@ -90,7 +90,7 @@ The admin console opens from Services → "Console d'administration".
 
 ### Runbook: dispute handling
 
-1. Console → disputes. Read the reason, the escrow, the stage (with photos) and both parties. Contact both (the in-app text promises contact within 48 hours and a decision within 5 working days).
+1. Console → disputes. Read the reason, the escrow, the stage (with photos), the evidence each side added ("Pièces": statements and photos, each labelled with its author) and both parties. Either side can keep adding evidence until the dispute is resolved, from the app or from their link. Contact both (the in-app text promises contact within 48 hours and a decision within 5 working days).
 2. Admin A: `POST /api/admin/disputes/:id/propose` with `outcome` and a `note` (shown to both parties), and `payeeAmount` in minor units for a split.
 3. Admin B reviews and `POST /api/admin/disputes/:id/approve`. Money moves, both parties are notified, the losing side is recorded in `resolution.against` (it lowers their reputation).
 4. There is no way to attach evidence through the product today.
