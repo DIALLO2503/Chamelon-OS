@@ -16,6 +16,8 @@ export const MODULES = {
   budget:     { icon: 'piggy-bank',      label: 'Budget' },
   float:      { icon: 'landmark',        label: 'Float', custody: 'held' },
   score:      { icon: 'gauge',           label: '{reputation}' },
+  pos:        { icon: 'smartphone',      label: 'Encaisser' },
+  advance:    { icon: 'hand-coins',      label: 'Avance', custody: 'held' },
   inbox:      { icon: 'bell',            label: 'Messages' },
   services:   { icon: 'layout-grid',     label: 'Services' },
 }
@@ -49,13 +51,22 @@ export const ACTIONS = {
   payCrew:        { icon: 'users-round',      label: 'Payer l’équipe',      module: 'jobs', action: 'crew' },
   setGoal:        { icon: 'trending-up',      label: 'Objectif du mois',    module: 'wallet', action: 'goal' },
   newGroup:       { icon: 'users-round',      label: 'Nouveau groupe',      module: 'tontine', action: 'create' },
+  // Only one of the two shows: each action is limited to its custody stage.
+  collect:         { icon: 'smartphone',      label: 'Encaisser',           module: 'pos', action: 'charge' },
+  collectRecorded: { icon: 'smartphone',      label: 'Encaisser',           module: 'pos', action: 'chargeRecorded' },
+  getAdvance:      { icon: 'hand-coins',      label: 'Avance',              module: 'advance', action: 'draw' },
 }
 
 // Rates: units of currency per 1 EUR, scaled by 1e8 so conversions are exact integer arithmetic.
 // Sandbox values: in held custody the partner's quote replaces them.
 export const FX_E8_PER_EUR = { EUR: 100000000n, MAD: 1085000000n, XOF: 65595700000n, XAF: 65595700000n, AED: 425000000n, GNF: 940000000000n }
 // remitFeeByLevel: share of the sending fee charged at each reputation level (0-3). Kept commitments lower the price.
-export const PRICING = { remitFee: { EUR: 150, AED: 500 }, remitFeeByLevel: [1, 1, 0.5, 0], agentCommissionBps: 50 }
+// advance: earned-wage advances (modules/advance.js). share of average monthly earnings received on Nexus, cap and flat fee in
+// minor units per currency (placeholders until the lender's tariff is signed), repayment term, minimum account age and earning days.
+export const PRICING = {
+  remitFee: { EUR: 150, AED: 500 }, remitFeeByLevel: [1, 1, 0.5, 0], agentCommissionBps: 50,
+  advance: { share: 0.3, cap: { XOF: 150000, AED: 200000, EUR: 30000 }, fee: { XOF: 1000, AED: 1500, EUR: 300 }, termDays: 30, minAgeDays: 60, minEarningDays: 6 },
+}
 
 // KYC levels: 0 = phone verified, 1 = identity verified, 2 = enhanced. Limits in minor units (placeholders until the partner's
 // tier rules are signed). single = one outflow, daily/monthly = total outflows, balance = maximum held balance.
@@ -66,13 +77,13 @@ const w = (type, title, extra = {}) => ({ type, title, ...extra })
 const shop = (label, hue = 20) => ({
   label, tagline: 'Commerce de quartier. Carnet de crédit clients et factures fournisseurs.', icon: 'store', hue,
   nav: ['creditbook', 'invoices', 'tontine'],
-  actions: ['addCredit', 'recordIn', 'receive', 'paySupplier', 'send'],
+  actions: ['addCredit', 'collect', 'collectRecorded', 'recordIn', 'receive', 'paySupplier', 'send'],
   home: [w('balance'), w('actions'), w('insight'), w('trend', 'Encaissements'), w('kpis', 'Carnet de crédit', { module: 'creditbook' }), w('rows', 'Crédits en cours', { module: 'creditbook' }), w('reputation', 'Votre {reputation}'), w('feed', 'Activité')],
 })
 const seller = tagline => ({
   label: 'Vendeuse en ligne', tagline, icon: 'shopping-bag', hue: 340,
   nav: ['orders', 'escrow', 'tontine'],
-  actions: ['paymentLink', 'requestDeposit', 'recordIn', 'send', 'scan'],
+  actions: ['paymentLink', 'collect', 'collectRecorded', 'requestDeposit', 'recordIn', 'send', 'scan'],
   home: [w('balance'), w('actions'), w('insight'), w('kpis', "Aujourd'hui", { module: 'orders' }), w('trend', 'Ventes encaissées'), w('rows', 'À encaisser', { module: 'orders' }), w('reputation', 'Votre {reputation}'), w('feed', 'Activité')],
 })
 const parent = {
@@ -109,7 +120,7 @@ export const REGIONS = {
   MA: {
     name: 'Maroc', currency: { code: 'MAD', symbol: 'DH', decimals: 2 }, languages: ['fr', 'ar'], dialCode: '+212', custody: 'record',
     vocab: { tontine: 'Daret', escrow: 'Aman', reputation: 'Niya' },
-    modules: ['wallet', 'tontine', 'escrow', 'jobs', 'orders', 'creditbook', 'invoices', 'family', 'score', 'inbox'],
+    modules: ['wallet', 'tontine', 'escrow', 'jobs', 'orders', 'pos', 'creditbook', 'invoices', 'family', 'score', 'inbox'],
     corridors: [], billers: ['Lydec', 'Redal', 'ONEE'],
     limits: limits(L(200000, 500000, 2000000, 500000), L(1000000, 2000000, 10000000, 2000000), L(5000000, 10000000, 50000000, 20000000)),
     personas: {
@@ -123,7 +134,7 @@ export const REGIONS = {
   SN: {
     name: 'Sénégal', currency: { code: 'XOF', symbol: 'F CFA', decimals: 0 }, languages: ['fr', 'wo'], dialCode: '+221', custody: 'held',
     vocab: { tontine: 'Natt', escrow: 'Séquestre', reputation: 'Réputation' },
-    modules: ['wallet', 'tontine', 'orders', 'shifts', 'float', 'creditbook', 'invoices', 'family', 'escrow', 'score', 'inbox'],
+    modules: ['wallet', 'tontine', 'orders', 'pos', 'shifts', 'advance', 'float', 'creditbook', 'invoices', 'family', 'escrow', 'score', 'inbox'],
     corridors: [], billers: ['Senelec', "Sen'Eau"], cashAgents: true,
     limits: limits(L(200000, 500000, 2000000, 2000000), L(1000000, 2000000, 15000000, 4000000), L(5000000, 10000000, 50000000, 20000000)),
     personas: {
@@ -131,7 +142,7 @@ export const REGIONS = {
       driver: {
         label: 'Chauffeur', tagline: 'Taxi, VTC ou moto Jakarta. Voyez ce qui reste après le carburant.', icon: 'car', hue: 255,
         nav: ['shifts', 'tontine', 'wallet'],
-        actions: ['addTrip', 'addFuel', 'send', 'scan'],
+        actions: ['addTrip', 'addFuel', 'getAdvance', 'send', 'scan'],
         home: [w('balance'), w('actions'), w('insight'), w('kpis', "Aujourd'hui", { module: 'shifts' }), w('bars', 'Cette semaine', { module: 'shifts' }), w('feed', 'Activité')],
       },
       agent: {
@@ -148,7 +159,7 @@ export const REGIONS = {
   GN: {
     name: 'Guinée', currency: { code: 'GNF', symbol: 'GNF', decimals: 0 }, languages: ['fr'], dialCode: '+224', custody: 'record',
     vocab: { tontine: 'Tontine', escrow: 'Séquestre', reputation: 'Réputation' },
-    modules: ['wallet', 'tontine', 'escrow', 'jobs', 'orders', 'creditbook', 'invoices', 'family', 'score', 'inbox'],
+    modules: ['wallet', 'tontine', 'escrow', 'jobs', 'orders', 'pos', 'creditbook', 'invoices', 'family', 'score', 'inbox'],
     corridors: [], billers: [],
     limits: limits(L(5000000, 10000000, 40000000, 10000000), L(20000000, 40000000, 200000000, 50000000), L(100000000, 200000000, 1000000000, 300000000)),
     personas: {
@@ -161,7 +172,7 @@ export const REGIONS = {
   CI: {
     name: 'Côte d’Ivoire', currency: { code: 'XOF', symbol: 'F CFA', decimals: 0 }, languages: ['fr'], dialCode: '+225', custody: 'record',
     vocab: { tontine: 'Tontine', escrow: 'Séquestre', reputation: 'Réputation' },
-    modules: ['wallet', 'tontine', 'escrow', 'jobs', 'orders', 'creditbook', 'invoices', 'family', 'score', 'inbox'],
+    modules: ['wallet', 'tontine', 'escrow', 'jobs', 'orders', 'pos', 'creditbook', 'invoices', 'family', 'score', 'inbox'],
     corridors: [], billers: ['CIE', 'SODECI'],
     limits: limits(L(200000, 500000, 2000000, 2000000), L(1000000, 2000000, 15000000, 4000000), L(5000000, 10000000, 50000000, 20000000)),
     personas: {
@@ -175,7 +186,7 @@ export const REGIONS = {
   CM: {
     name: 'Cameroun', currency: { code: 'XAF', symbol: 'F CFA', decimals: 0 }, languages: ['fr', 'en'], dialCode: '+237', custody: 'record',
     vocab: { tontine: 'Njangi', escrow: 'Séquestre', reputation: 'Réputation' },
-    modules: ['wallet', 'tontine', 'escrow', 'jobs', 'orders', 'creditbook', 'invoices', 'family', 'score', 'inbox'],
+    modules: ['wallet', 'tontine', 'escrow', 'jobs', 'orders', 'pos', 'creditbook', 'invoices', 'family', 'score', 'inbox'],
     corridors: [], billers: ['ENEO', 'Camwater'],
     limits: limits(L(200000, 500000, 2000000, 2000000), L(1000000, 2000000, 15000000, 4000000), L(5000000, 10000000, 50000000, 20000000)),
     personas: {
@@ -211,7 +222,7 @@ export const REGIONS = {
   AE: {
     name: 'Émirats', currency: { code: 'AED', symbol: 'AED', decimals: 2 }, languages: ['fr', 'ar', 'en'], dialCode: '+971', custody: 'held',
     vocab: { tontine: 'Tontine', escrow: 'Séquestre', reputation: 'Réputation' },
-    modules: ['wallet', 'remit', 'family', 'tontine', 'escrow', 'invoices', 'score', 'inbox'],
+    modules: ['wallet', 'remit', 'family', 'tontine', 'escrow', 'invoices', 'advance', 'score', 'inbox'],
     corridors: ['MA', 'SN'], billers: [],
     limits: limits(L(300000, 300000, 300000, 300000), L(3500000, 3500000, 10000000, 3500000), L(20000000, 20000000, 50000000, 20000000)),
     personas: {

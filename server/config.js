@@ -72,6 +72,9 @@ export const config = {
   whatsapp: { from: env.WHATSAPP_FROM, templates: jsonEnv('WHATSAPP_TEMPLATES') },
   // After a forgotten secret code is replaced, money actions wait this long: time for the owner to react to a stolen phone or SIM.
   pinResetHoldHours: Number(env.PIN_RESET_HOLD_HOURS || 24),
+  // Earned-wage advances are lending: in live they stay closed until a licensed lender funds a credit line at the payment
+  // partner. ADVANCE_LENDER names it (shown in audits); the sandbox simulates one.
+  advances: { lender: env.ADVANCE_LENDER || null },
   autoReleaseDays: Number(env.AUTO_RELEASE_DAYS || 7),
   orderReleaseHours: Number(env.ORDER_RELEASE_HOURS || 72),
 }
@@ -88,6 +91,8 @@ if (config.env === 'live') {
     if (!config.partner.baseUrl || !config.partner.apiKey || !config.partner.webhookSecret) throw new Error('Live mode requires PARTNER_BASE_URL, PARTNER_API_KEY and PARTNER_WEBHOOK_SECRET')
   }
   if (!config.sms.provider) throw new Error('Live mode requires SMS_PROVIDER for login codes')
+  // The lender's money reaches people through the partner: no partner, no advances.
+  if (config.advances.lender && config.provider !== 'partner') throw new Error('ADVANCE_LENDER requires PAYMENT_PROVIDER=partner: advances are paid and repaid through the partner')
   if (!['sms', 'whatsapp'].includes(config.notifier)) throw new Error('Live mode requires NOTIFIER=sms or NOTIFIER=whatsapp')
 }
 // A messaging configuration is checked whenever one is given, so a sandbox pointed at a real account fails at boot, not at first send.

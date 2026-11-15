@@ -18,6 +18,8 @@ Sandbox only. No licence and no payment partner are signed. Everything external 
 | Identity checks | One tap (`wallet.verify`), or an admin sets the level | Partner or KYC vendor writing `users.kyc_level` |
 | FX rates and fees | Static values in `server/catalog.js` | Partner quotes |
 | Bill payment | Simulated payout | Biller integrations |
+| In-person collection (`pos`) | Payment request settled by the simulated partner | The partner's collection API (same as top-ups); no card reading: that needs a native app and a certified SDK |
+| Earned-wage advances (`advance`) | Simulated lender credit line | A licensed lender funding a line at the partner; closed in live until `ADVANCE_LENDER` is set |
 
 See [docs/partner-integration.md](docs/partner-integration.md) for the full list.
 
@@ -37,7 +39,7 @@ npm run seed                     # migrates, then creates 19 demo accounts (PIN 
 npm run build                    # builds the PWA into dist/
 npm run server                   # http://localhost:3001 (serves dist/ and /api)
 
-# 3. Tests (60, end to end, against nexus_test; the schema is dropped and recreated)
+# 3. Tests (64, end to end, against nexus_test; the schema is dropped and recreated)
 npm test
 ```
 
@@ -120,7 +122,7 @@ All variables are read in `server/config.js` (plus `CUSTODY_<ID>` in `server/cat
 | [docs/partner-integration.md](docs/partner-integration.md) | Go-live checklist for a licensed partner |
 | [docs/pilot.md](docs/pilot.md) | Running the two-country pilot on one server, with phones as SMS gateways and no payment partner |
 | [docs/demo.md](docs/demo.md) | A public sandbox demo on Render in a few clicks (`render.yaml`), with the demo accounts |
-| [docs/testing.md](docs/testing.md) | What the 60 tests prove and how to add one |
+| [docs/testing.md](docs/testing.md) | What the 64 tests prove and how to add one |
 | [docs/glossary.md](docs/glossary.md) | Product and domain terms |
 
 ## Layout

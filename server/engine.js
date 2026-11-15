@@ -12,8 +12,10 @@ import { orders, creditbook, invoices } from './modules/commerce.js'
 import { shifts, budget, float, score, scoreCard } from './modules/work.js'
 import { trendBlock, moneyAlerts } from './insights.js'
 import inbox from './modules/inbox.js'
+import pos from './modules/pos.js'
+import advance from './modules/advance.js'
 
-export const MODS = { wallet, tontine, escrow, jobs, remit, family, orders, creditbook, invoices, shifts, budget, float, score, inbox }
+export const MODS = { wallet, tontine, escrow, jobs, remit, family, orders, creditbook, invoices, shifts, budget, float, score, pos, advance, inbox }
 validateCatalog(MODS)
 
 const INTENT_TTL_MIN = 10

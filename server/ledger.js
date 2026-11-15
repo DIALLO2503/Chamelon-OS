@@ -3,10 +3,12 @@ import { newId, fail, money } from './core.js'
 import { REGIONS } from './catalog.js'
 
 // System accounts that stand for money outside Nexus's shadow ledger (partner rail, FX position, commission expense,
-// manual adjustments) may go negative. Every other account has a floor of zero.
-const OPEN = new Set(['rail', 'fx', 'commissions', 'adjustments'])
+// manual adjustments, the advance lender's credit line at the partner) may go negative. Every other account has a floor of zero.
+const OPEN = new Set(['rail', 'fx', 'commissions', 'adjustments', 'lender'])
 // Credits that undo or complete an earlier movement are never blocked by the balance cap, or money would get stuck.
 const CAP_EXEMPT = new Set(['escrow_refund', 'escrow_release', 'payout_reversed', 'adjustment', 'tontine_out', 'order_refund'])
+// Debits that pay back a debt are never blocked by spending limits, and do not use them up.
+const OUTFLOW_EXEMPT = new Set(['advance_repay'])
 
 export async function account(client, owner, kind, currency) {
   await client.query(
@@ -27,13 +29,14 @@ async function checkLimits(client, kind, lines) {
     if (acc.frozen) fail('Ce compte est suspendu. Contactez l’assistance.', 403)
     const lim = REGIONS[acc.region].limits[acc.kyc_level]
     const f = n => money(n, acc.currency)
+    if (delta < 0 && OUTFLOW_EXEMPT.has(kind)) continue
     if (delta < 0) {
       const out = -delta
       if (out > lim.single) fail(`Montant au-delà de votre plafond par opération (${f(lim.single)}). Vérifiez votre identité pour l’augmenter.`)
       // Outflows minus payouts the partner failed and returned: a failed withdrawal does not use up the limit.
       const sums = await one(client, `SELECT
-          COALESCE(SUM(CASE WHEN p.amount < 0 THEN -p.amount WHEN e.kind = 'payout_reversed' THEN -p.amount ELSE 0 END) FILTER (WHERE p.created_at > now() - interval '1 day'), 0)::bigint AS day,
-          COALESCE(SUM(CASE WHEN p.amount < 0 THEN -p.amount WHEN e.kind = 'payout_reversed' THEN -p.amount ELSE 0 END) FILTER (WHERE p.created_at > date_trunc('month', now())), 0)::bigint AS month
+          COALESCE(SUM(CASE WHEN e.kind = 'advance_repay' THEN 0 WHEN p.amount < 0 THEN -p.amount WHEN e.kind = 'payout_reversed' THEN -p.amount ELSE 0 END) FILTER (WHERE p.created_at > now() - interval '1 day'), 0)::bigint AS day,
+          COALESCE(SUM(CASE WHEN e.kind = 'advance_repay' THEN 0 WHEN p.amount < 0 THEN -p.amount WHEN e.kind = 'payout_reversed' THEN -p.amount ELSE 0 END) FILTER (WHERE p.created_at > date_trunc('month', now())), 0)::bigint AS month
         FROM postings p JOIN entries e ON e.id = p.entry_id WHERE p.account_id=$1`, [accountId])
       if (sums.day + out > lim.daily) fail(`Plafond journalier atteint (${f(lim.daily)}).`)
       if (sums.month + out > lim.monthly) fail(`Plafond mensuel atteint (${f(lim.monthly)}).`)

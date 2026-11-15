@@ -98,6 +98,7 @@ test('live boots without a payment partner only when every open country is in "r
   assert.equal(boot({ SIGNUP_REGIONS: 'MA,GN,SN', CUSTODY_SN: 'record', SMSGATE_USER: 'ANY', SMSGATE_PASSWORD: 'x' }), 'boots')
   assert.match(boot({ SMSGATE_GN_USER: '', SMSGATE_GN_PASSWORD: '' }), /missing: GN/)
   assert.match(boot({ PAYMENT_PROVIDER: 'sandbox' }), /requires PAYMENT_PROVIDER=partner/)
+  assert.match(boot({ ADVANCE_LENDER: 'Some lender' }), /ADVANCE_LENDER requires PAYMENT_PROVIDER=partner/, 'no advances without a partner to pay them through')
 })
 
 test('the funnel counts who opened a link, who acted on it and who signed up afterwards, once per person', async () => {

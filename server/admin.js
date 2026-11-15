@@ -18,7 +18,7 @@ const log = (c, req, action, objectType, objectId, data) => audit(c, { actorType
 export async function safeguarding(client = pool) {
   const rows = await all(client, `SELECT currency,
       COALESCE(SUM(balance) FILTER (WHERE owner <> 'system' OR kind IN ('escrow','payout_pending','returns','remit_transit','fx_out')),0)::bigint AS owed,
-      COALESCE(-SUM(balance) FILTER (WHERE owner='system' AND kind IN ('rail','fx','adjustments','commissions')),0)::bigint AS held_at_partner
+      COALESCE(-SUM(balance) FILTER (WHERE owner='system' AND kind IN ('rail','fx','adjustments','commissions','lender')),0)::bigint AS held_at_partner
     FROM accounts GROUP BY currency ORDER BY currency`)
   return rows.map(r => ({ ...r, ok: r.owed <= r.held_at_partner, owedText: money(r.owed, r.currency), heldText: money(r.held_at_partner, r.currency) }))
 }

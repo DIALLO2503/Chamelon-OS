@@ -78,6 +78,8 @@ Widgets per module: `wallet.goal`; `tontine.rows`; `escrow.rows`; `jobs.rows`; `
 | `shifts` | trip R, expense R |
 | `budget` | set R, expense R |
 | `float` (held) | cashIn P held role agent, cashOut P held role agent |
+| `pos` | charge R held (payment request to the customer's mobile money), chargeRecorded R record (customer confirms by scanning) |
+| `advance` (held) | draw P held, repay P held; closed in live until `ADVANCE_LENDER` is set |
 | `score` | none (view only) |
 | `inbox` | readAll R |
 
