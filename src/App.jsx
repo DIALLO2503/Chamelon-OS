@@ -1,4 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useState } from 'react'
+import { t, LANGS, currentLang, setLang } from './i18n.js'
 import { api, session, download } from './api.js'
 import Auth from './Auth.jsx'
 import Icon from './ui/Icon.jsx'
@@ -29,6 +30,7 @@ function Screen({ path, head }) {
   if (!data) return <div className="screen" aria-busy="true">{head}{[72, 88, 180, 140].map(h => <div key={h} className="skeleton" style={{ height: h }} />)}</div>
   return (
     <div className="screen">
+      {data._offline && <div className="insight notice" role="status"><Icon name="clock" size={22} /><div><p>Hors ligne · dernière mise à jour {new Intl.DateTimeFormat('fr-FR', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }).format(new Date(data._offline))}. Lecture seule : les actions reviennent avec le réseau.</p></div></div>}
       {head ?? <h1 className="screen-title">{data.label}</h1>}
       {data.actions?.length > 0 && (
         <div className="chip-row">
@@ -82,7 +84,7 @@ function Profile() {
   const list = open ? data.choices : data.choices.filter(c => c.suggested)
   return (
     <section className="sec">
-      <h2>Votre profil</h2>
+      <h2>{t('Votre profil')}</h2>
       <div className="card">
         <div className="row"><div className="row-main"><span className="disc soft small"><Icon name={me.experience.persona.icon} size={16} /></span><div className="grow"><div className="row-title">{me.experience.persona.label}</div><div className="muted">Votre application est construite pour ce métier.</div></div></div></div>
         {data.suggestion && <div className="insight"><Icon name="sparkles" size={22} /><div><p>{data.suggestion.why} : votre activité ressemble à celle du profil « {data.suggestion.label} ».</p></div></div>}
@@ -90,7 +92,7 @@ function Profile() {
           <div key={c.id} className="row"><div className="row-main">
             <span className="disc soft small"><Icon name={c.icon} size={16} /></span>
             <div className="grow"><div className="row-title">{c.label} {c.tier > 1 && <span className="pill">Tier {c.tier}</span>}</div><div className="muted">{c.tagline}</div></div>
-            <button className={`chip-btn ${c.suggested ? 'primary' : ''}`} disabled={Boolean(data.cooldownUntil) || state.busy === c.id} onClick={() => go(c.id)}>{state.confirm === c.id ? 'Confirmer' : 'Passer à ce profil'}</button>
+            <button className={`chip-btn ${c.suggested ? 'primary' : ''}`} disabled={Boolean(data.cooldownUntil) || state.busy === c.id} onClick={() => go(c.id)}>{state.confirm === c.id ? t('Confirmer') : t('Passer à ce profil')}</button>
           </div></div>
         ))}
         {data.cooldownUntil && <div className="row muted">Prochain changement possible le {new Intl.DateTimeFormat('fr-FR', { day: 'numeric', month: 'long' }).format(new Date(data.cooldownUntil))}.</div>}
@@ -102,19 +104,31 @@ function Profile() {
   )
 }
 
+// Language: saved on this device and on the account (the server then translates module names and quick actions).
+function Language() {
+  const { refresh } = useApp()
+  const pick = async id => { setLang(id); await api('/me/locale', { body: { locale: id } }).catch(() => {}); refresh() }
+  return (
+    <section className="sec">
+      <h2>{t('Langue')}</h2>
+      <div className="chip-row">{LANGS.map(([id, name]) => <button key={id} className={`chip-btn ${currentLang() === id ? 'primary' : ''}`} aria-pressed={currentLang() === id} onClick={() => pick(id)}>{name}</button>)}</div>
+    </section>
+  )
+}
+
 function Services({ openAdmin }) {
   const { me, setTab, logout } = useApp()
   const { user, experience } = me
   return (
     <div className="screen">
-      <h1 className="screen-title">Services</h1>
+      <h1 className="screen-title">{t('Services')}</h1>
       <p className="muted">Disponibles en {experience.region.name} · {experience.region.custody === 'held' ? 'avec partenaire de paiement agréé' : 'paiements en direct, preuves dans Nexus'}</p>
       <div className="tiles">
         {experience.services.map(m => <button key={m.id} className="tile" onClick={() => setTab(m.id)}><span className="disc soft"><Icon name={m.icon} /></span>{m.label}</button>)}
       </div>
       {experience.locked?.length > 0 && (
         <section className="sec">
-          <h2>À débloquer</h2>
+          <h2>{t('À débloquer')}</h2>
           <div className="card">
             {experience.locked.map(m => (
               <button key={m.id} className="row row-main locked" onClick={() => setTab('score')}>
@@ -128,13 +142,14 @@ function Services({ openAdmin }) {
         </section>
       )}
       <Profile />
+      <Language />
       {user.pendingRoles.length > 0 && <div className="insight notice"><Icon name="clock" size={22} /><div><p>Votre demande d’agrément est en cours de vérification par notre équipe.</p></div></div>}
       <div className="card account">
         <div><strong>{user.name}</strong><div className="muted">{user.phone} · {KYC[user.kycLevel]}</div></div>
-        <button className="chip-btn" onClick={logout}><Icon name={me.sandbox ? 'users-round' : 'log-out'} size={16} />{me.sandbox ? 'Changer de compte' : 'Se déconnecter'}</button>
+        <button className="chip-btn" onClick={logout}><Icon name={me.sandbox ? 'users-round' : 'log-out'} size={16} />{me.sandbox ? t('Changer de compte') : t('Se déconnecter')}</button>
       </div>
       <DataRights />
-      {user.isAdmin && <button className="cta quiet" onClick={openAdmin}><Icon name="shield-check" size={18} /> Console d’administration</button>}
+      {user.isAdmin && <button className="cta quiet" onClick={openAdmin}><Icon name="shield-check" size={18} /> {t('Console d’administration')}</button>}
     </div>
   )
 }
@@ -150,7 +165,19 @@ function MainApp() {
   const logout = useCallback(async () => { await session.logout(); setMe(null); setSignedIn(false); setTab('home'); setSheet(null); setAdmin(false) }, [])
   useEffect(() => { session.onExpired(() => { setMe(null); setSignedIn(false) }) }, [])
   useEffect(() => { session.restore().then(setSignedIn) }, [])
-  useEffect(() => { if (signedIn) api('/me').then(setMe).catch(() => setSignedIn(false)) }, [signedIn, version])
+  // Language at sign-in: a language picked on this device (before signing in) is saved to the account; otherwise the
+  // account's language (chosen on another phone) is applied here. French is the default on both sides.
+  useEffect(() => {
+    if (!signedIn) return
+    api('/me').then(m => {
+      const device = currentLang(), account = m.user.locale ?? 'fr'
+      if (device !== account) {
+        if (account === 'fr') api('/me/locale', { body: { locale: device } }).then(() => setVersion(v => v + 1)).catch(() => {})
+        else setLang(account)
+      }
+      setMe(m)
+    }).catch(() => setSignedIn(false))
+  }, [signedIn, version])
 
   if (signedIn === null) return <div className="boot"><Icon name="loader-circle" size={28} /></div>
   if (!signedIn) return <Auth onDone={() => setSignedIn(true)} />

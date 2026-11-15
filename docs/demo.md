@@ -1,6 +1,6 @@
 # Online demo
 
-A public copy of the **sandbox** to show Nexus to partners and investors: the 31 demo accounts, one per profile and country (PIN `2580`), the simulated payment partner, login codes shown on screen. It is not the pilot: for real people, follow [pilot.md](pilot.md).
+A public copy of the **sandbox** to show Nexus to partners and investors: the 39 demo accounts, one per profile and country (PIN `2580`), the simulated payment partner, login codes shown on screen. It is not the pilot: for real people, follow [pilot.md](pilot.md).
 
 ## Deploy on Render
 

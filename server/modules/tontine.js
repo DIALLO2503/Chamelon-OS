@@ -8,6 +8,8 @@ import { notify, createLink, shareFor, startCollection, collectionHandlers } fro
 import { amountField, textField, deliver, regionOfPhone, recordPayment, settleRecorded, onRecordedConfirmed, onRecordedRejected, returnCollection } from './shared.js'
 
 const PERIOD_DAYS = { weekly: 7, monthly: 30 }
+// After the due date, members have this many days before the organiser may close the round without them.
+export const GRACE_DAYS = 7
 const potAccount = (client, t) => account(client, `tontine:${t.id}`, 'pot', t.currency)
 export const membersOf = (client, t) => all(client, `SELECT m.*, p.name, p.phone, p.user_id FROM tontine_members m JOIN parties p ON p.id=m.party_id WHERE m.tontine_id=$1 ORDER BY m.position NULLS LAST, p.name`, [t.id])
 const contribsOf = (client, t) => all(client, `SELECT * FROM tontine_contribs WHERE tontine_id=$1 AND round=$2`, [t.id, t.round])
@@ -37,19 +39,25 @@ export async function acceptInvite(client, id, party) {
   }
 }
 
-async function completeRoundIfFull(client, t) {
-  const confirmed = (await contribsOf(client, t)).filter(c => c.status === 'confirmed')
-  if (confirmed.length < t.size) return null
+// Pays the round's receiver what was collected (the whole pot, or less when the round was closed with defaults) and opens the next round.
+async function payRound(client, t, paidCount) {
   const receiver = (await membersOf(client, t)).find(m => m.position === t.round)
-  const total = t.amount * t.size
-  if (t.mode === 'held') {
+  const total = t.amount * paidCount
+  if (t.mode === 'held' && total > 0) {
     await deliver(client, { source: await potAccount(client, t), amount: total, toParty: await partyById(client, receiver.party_id), title: `Cagnotte ${t.name} (tour ${t.round})`, purpose: { tontineId: t.id, round: t.round }, kind: 'tontine_out' })
   }
   const last = t.round === t.size
   await client.query(`UPDATE tontines SET round=$2, status=$3, next_due=$4 WHERE id=$1`, [t.id, last ? t.round : t.round + 1, last ? 'completed' : 'active', last ? null : addDays(t.next_due ?? today(), PERIOD_DAYS[t.frequency])])
-  await notify(client, { partyId: receiver.party_id, template: 'tontine.pot', text: t.mode === 'held' ? `Tour complet : vous recevez la cagnotte de ${money(total, t.currency)} (« ${t.name} »).` : `Tour complet : l’organisateur doit vous remettre la cagnotte de ${money(total, t.currency)} (« ${t.name} »).` })
+  await notify(client, { partyId: receiver.party_id, template: 'tontine.pot', text: `Tour ${paidCount === t.size ? 'complet' : 'clos'} : ${t.mode === 'held' ? 'vous recevez' : 'l’organisateur doit vous remettre'} la cagnotte de ${money(total, t.currency)} (« ${t.name} »).` })
   return receiver
 }
+async function completeRoundIfFull(client, t) {
+  const confirmed = (await contribsOf(client, t)).filter(c => c.status === 'confirmed')
+  if (confirmed.length < t.size) return null
+  return payRound(client, t, t.size)
+}
+const graceOver = t => Boolean(t.next_due) && addDays(t.next_due, GRACE_DAYS) < today()
+const defaultsOf = (client, t) => all(client, 'SELECT d.*, p.name FROM tontine_defaults d JOIN parties p ON p.id=d.party_id WHERE d.tontine_id=$1 ORDER BY d.round', [t.id])
 
 // Held mode: a member's contribution lands in the group's own pot account.
 async function creditContribution(client, t, partyId, sourceLines) {
@@ -98,6 +106,7 @@ async function row(ctx, t) {
       actions: me.accepted_at ? [{ id: 'invite', label: 'Relancer' }] : [{ id: 'accept', label: 'Accepter', tone: 'primary' }] }
   }
   if (t.status === 'completed') return { id: t.id, title: t.name, sub: `${t.size} tours terminés`, value: f(t.amount), status: 'Terminée', tone: 'ok', progress: 1 }
+  if (t.status === 'dissolved') return { id: t.id, title: t.name, sub: `Dissous au tour ${t.round}`, value: f(t.amount), status: 'Dissous', tone: 'bad' }
   const contribs = await contribsOf(ctx.client, t)
   const confirmed = contribs.filter(c => c.status === 'confirmed')
   const receiver = members.find(m => m.position === t.round)
@@ -106,9 +115,13 @@ async function row(ctx, t) {
   const actions = []
   if (!mineC) actions.push({ id: 'contribute', label: t.mode === 'held' ? 'Cotiser' : 'J’ai cotisé', tone: 'primary' })
   if (organiser && t.mode === 'recorded' && contribs.some(c => c.status === 'claimed')) actions.push({ id: 'review', label: 'Confirmer les cotisations', tone: 'primary' })
+  if (organiser && graceOver(t) && confirmed.length < t.size) actions.push({ id: 'closeRound', label: 'Clore le tour' })
+  if (organiser) actions.push({ id: 'dissolve', label: 'Dissoudre' })
+  const defaults = await defaultsOf(ctx.client, t)
+  const defaultNote = defaults.length ? ` · ${defaults.length} défaut${defaults.length > 1 ? 's' : ''} : ${[...new Set(defaults.map(d => mask(d.name)))].join(', ')}` : ''
   return {
     id: t.id, title: t.name, value: f(t.amount), progress: confirmed.length / t.size,
-    sub: `Tour ${t.round}/${t.size} · ${receiver.party_id === ctx.party.id ? 'vous recevez' : `${mask(receiver.name)} reçoit`} ${f(t.amount * t.size)} · avant le ${longDate(t.next_due)}`,
+    sub: `Tour ${t.round}/${t.size} · ${receiver.party_id === ctx.party.id ? 'vous recevez' : `${mask(receiver.name)} reçoit`} ${f(t.amount * t.size)} · avant le ${longDate(t.next_due)}${defaultNote}`,
     status: mineC?.status === 'confirmed' ? 'Cotisé' : mineC ? 'À confirmer' : late ? 'En retard' : 'À cotiser', tone: mineC?.status === 'confirmed' ? 'ok' : late ? 'bad' : 'wait', actions,
   }
 }
@@ -122,6 +135,8 @@ export default {
   widgets: { rows: async ctx => rowsBlock(null, 'users-round', await Promise.all((await mine(ctx)).slice(0, 3).map(t => row(ctx, t)))) },
   async insight(ctx) {
     for (const t of await mine(ctx)) {
+      if (t.status === 'active' && t.organiser_id === ctx.user.id && graceOver(t) && (await contribsOf(ctx.client, t)).filter(c => c.status === 'confirmed').length < t.size)
+        return { icon: 'triangle-alert', tone: 'warn', text: `« ${t.name} » : le tour ${t.round} est en retard de plus de ${GRACE_DAYS} jours. Vous pouvez le clore : le bénéficiaire reçoit ce qui a été versé, les absents sont inscrits en défaut.`, cta: { label: 'Clore le tour', module: 'tontine', action: 'closeRound', row: t.id } }
       const m = await one(ctx.client, 'SELECT * FROM tontine_members WHERE tontine_id=$1 AND party_id=$2', [t.id, ctx.party.id])
       if (t.status === 'forming' && !m.accepted_at) return { icon: 'users-round', text: `Vous êtes invité dans le groupe « ${t.name} » (${money(t.amount, t.currency)} par tour).`, cta: { label: 'Accepter', module: 'tontine', action: 'accept', row: t.id } }
       if (t.status === 'active' && !await one(ctx.client, 'SELECT 1 FROM tontine_contribs WHERE tontine_id=$1 AND round=$2 AND party_id=$3', [t.id, t.round, ctx.party.id]))
@@ -205,6 +220,69 @@ export default {
         }
       },
     },
+    // After the grace period the organiser closes the round with whoever paid: no group stays frozen by one member.
+    closeRound: {
+      label: 'Clore le tour', icon: 'triangle-alert',
+      async form(ctx, row) {
+        const { t } = await loadTontine(ctx.client, row, ctx.party)
+        if (t.organiser_id !== ctx.user.id) fail('Réservé à l’organisateur', 403)
+        if (t.status !== 'active') return { title: 'Clore le tour', info: 'Ce groupe n’est pas en cours.', fields: [], blocked: true }
+        if (!graceOver(t)) return { title: 'Clore le tour', info: `Possible ${GRACE_DAYS} jours après l’échéance du ${longDate(t.next_due)}.`, fields: [], blocked: true }
+        return { title: `Clore le tour ${t.round}`, info: 'Le bénéficiaire reçoit les cotisations versées ; chaque membre qui n’a pas cotisé est inscrit en défaut, visible par le groupe et compté dans sa réputation.', fields: [] }
+      },
+      async plan(ctx, input, row) {
+        const { t } = await loadTontine(ctx.client, row, ctx.party)
+        if (t.organiser_id !== ctx.user.id || t.status !== 'active' || !graceOver(t)) fail('Ce tour ne peut pas être clos maintenant', 409)
+        const contribs = await contribsOf(ctx.client, t)
+        if (contribs.some(c => c.status === 'claimed')) fail('Confirmez ou refusez d’abord les cotisations signalées', 409)
+        const paid = contribs.filter(c => c.status === 'confirmed')
+        const members = await membersOf(ctx.client, t)
+        const missing = members.filter(m => !paid.some(c => c.party_id === m.party_id))
+        const receiver = members.find(m => m.position === t.round)
+        return {
+          review: { lines: [['Tour', `${t.round} sur ${t.size}`], ['Cotisations versées', `${paid.length} sur ${t.size}`], [`${mask(receiver.name)} reçoit`, money(t.amount * paid.length, t.currency), true], ['Inscrits en défaut', missing.map(m => mask(m.name)).join(', ') || 'aucun']], cta: 'Clore le tour' },
+          async exec() {
+            const fresh = await one(ctx.client, 'SELECT * FROM tontines WHERE id=$1 FOR UPDATE', [t.id])
+            if (fresh.round !== t.round || fresh.status !== 'active') fail('Le tour a changé entre-temps', 409)
+            for (const m of missing) {
+              await ctx.client.query('INSERT INTO tontine_defaults (tontine_id, round, party_id, amount, currency) VALUES ($1,$2,$3,$4,$5) ON CONFLICT DO NOTHING', [t.id, t.round, m.party_id, t.amount, t.currency])
+              await notify(ctx.client, { partyId: m.party_id, template: 'tontine.default', text: `« ${t.name} » : le tour ${t.round} a été clos sans votre cotisation (${money(t.amount, t.currency)}). Elle est inscrite en défaut.` })
+            }
+            await payRound(ctx.client, fresh, paid.length)
+            return { message: `Tour ${t.round} clos : ${missing.length} défaut${missing.length > 1 ? 's' : ''} inscrit${missing.length > 1 ? 's' : ''}.` }
+          },
+        }
+      },
+    },
+    // Ends the group. Held mode: the current round's contributions go back to whoever paid them.
+    dissolve: {
+      label: 'Dissoudre le groupe', icon: 'x',
+      async form(ctx, row) {
+        const { t } = await loadTontine(ctx.client, row, ctx.party)
+        if (t.organiser_id !== ctx.user.id) fail('Réservé à l’organisateur', 403)
+        if (!['forming', 'active'].includes(t.status)) return { title: 'Dissoudre le groupe', info: 'Ce groupe est déjà terminé.', fields: [], blocked: true }
+        return { title: 'Dissoudre le groupe', info: t.mode === 'held' ? 'Le groupe s’arrête. Les cotisations du tour en cours sont remboursées à ceux qui les ont versées.' : 'Le groupe s’arrête. Vous rendez directement les cotisations du tour en cours ; tous les membres sont prévenus.', fields: [] }
+      },
+      async plan(ctx, input, row) {
+        const { t } = await loadTontine(ctx.client, row, ctx.party)
+        if (t.organiser_id !== ctx.user.id || !['forming', 'active'].includes(t.status)) fail('Ce groupe ne peut pas être dissous', 409)
+        const paid = t.status === 'active' ? (await contribsOf(ctx.client, t)).filter(c => c.status === 'confirmed') : []
+        return {
+          review: { lines: [['Groupe', t.name], ['Cotisations du tour à rendre', `${paid.length} × ${money(t.amount, t.currency)}`, true], ['Remboursement', t.mode === 'held' ? 'Automatique' : 'Par vous, en direct']], cta: 'Dissoudre' },
+          async exec() {
+            if (t.mode === 'held') {
+              for (const c of paid) await deliver(ctx.client, { source: await potAccount(ctx.client, t), amount: t.amount, toParty: await partyById(ctx.client, c.party_id), title: `Remboursement ${t.name}`, purpose: { tontineId: t.id, round: t.round, refund: true }, kind: 'tontine_out' })
+            }
+            await ctx.client.query(`UPDATE tontines SET status='dissolved', next_due=NULL WHERE id=$1`, [t.id])
+            for (const m of await membersOf(ctx.client, t)) {
+              const refunded = t.mode === 'held' && paid.some(c => c.party_id === m.party_id)
+              await notify(ctx.client, { partyId: m.party_id, template: 'tontine.dissolved', text: `Le groupe « ${t.name} » est dissous par l’organisateur.${refunded ? ` Votre cotisation de ${money(t.amount, t.currency)} vous est remboursée.` : ''}` })
+            }
+            return { message: 'Groupe dissous' }
+          },
+        }
+      },
+    },
     review: {
       label: 'Confirmer les cotisations',
       async form(ctx, row) {
@@ -217,6 +295,7 @@ export default {
       async run(ctx, input) { await settleRecorded(ctx.client, input.payment, ctx.party, true); return { message: 'Cotisation confirmée' } },
     },
   },
+  defaultsFor: async (client, partyId) => (await one(client, 'SELECT count(*)::int AS n FROM tontine_defaults WHERE party_id=$1 AND settled_at IS NULL', [partyId])).n,
   contributions: async (client, partyId) => (await one(client, `SELECT count(*)::int AS n FROM tontine_contribs WHERE party_id=$1 AND status='confirmed'`, [partyId])).n,
   lateFor: async (client, partyId) => (await one(client, `SELECT count(*)::int AS n FROM tontines t JOIN tontine_members m ON m.tontine_id=t.id
     WHERE m.party_id=$1 AND t.status='active' AND t.next_due < CURRENT_DATE AND NOT EXISTS (SELECT 1 FROM tontine_contribs c WHERE c.tontine_id=t.id AND c.round=t.round AND c.party_id=$1)`, [partyId])).n,

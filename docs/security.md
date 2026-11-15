@@ -160,6 +160,14 @@ Stated plainly.
 - A person can download their own data (`GET /api/me/export`) and ask for their account to be closed (`POST /api/me/closure`, which alerts the admins).
 - Photos are served again: with the default `UPLOAD_DIR` (`.local/uploads`) every `GET /api/uploads/:id` answered 404, because Express refuses a bare absolute path containing a dot-segment.
 
-**Not implemented:** sanctions/PEP screening, transaction monitoring and suspicious-activity reporting, partner statement reconciliation, catalog versioning, device binding, off-server backups, metrics and error tracking, i18n, account deletion (a closure request is recorded and handled by hand).
+**Fixed after the external audit:**
+- A tontine round no longer freezes when one member stops paying: `GRACE_DAYS` (7) after the due date the organiser closes the round; the receiver gets what was paid and each absentee is recorded in `tontine_defaults` (visible to the group, −60 reputation points each). The organiser can also dissolve the group; in held custody the current round is refunded.
+- Personal data is out of the append-only ledger: postings keep amount, account, reference and icon; labels and counterparties live in `posting_details` (migration 011 moved existing rows, the only time the trigger is lifted). An admin can erase a closed account with a zero balance (`POST /api/admin/users/:id/erase`): name, phone, labels, payment purposes and notifications are scrubbed, amounts and ledger lines stay.
+- A public link uploads at most 12 photos a day; photos can live in any S3-compatible store (`STORAGE=s3`).
+- The catalog is versioned (runtime catalog, two-person rule, rollback).
+- No reputation level makes sending free (`remitFeeByLevel` ends at 0.25); an escrow protection fee is configurable per catalog version (`escrowFeeBps`).
+- Read-only offline view: the last home, module and profile screens are kept on the device (cleared at sign-out).
+
+**Not implemented:** sanctions/PEP screening, transaction monitoring and suspicious-activity reporting, partner statement reconciliation, device binding, off-server backups, metrics and error tracking, full translation (only module names, quick actions, sign-in and navigation are in Arabic and English), rate limits shared across servers (in-memory per process).
 
 **Non-goals for this codebase:** Nexus holding customer funds itself; credit or lending; card payments.

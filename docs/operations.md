@@ -31,7 +31,7 @@ The admin console opens from Services → "Console d'administration".
 
 ## Seeding rules
 
-`npm run seed` (`node --env-file=env/sandbox.env server/seed.js`) refuses to run outside sandbox, migrates, and does nothing if any user exists. It creates 31 accounts (one per profile and country) with PIN 2580 and drives every action through the engine, settling partner operations itself, so balances match the ledger. To reseed: the **Recommencer la démo** button on the sign-in screen (`POST /api/sandbox/reset`: truncates every table except `schema_migrations`, then seeds again; refused unless `NEXUS_ENV=sandbox`, hidden with `SANDBOX_RESET=off`), or drop and recreate the `nexus` database, then seed. Never point a sandbox or test run at a live `DATABASE_URL`: the tests drop the `public` schema.
+`npm run seed` (`node --env-file=env/sandbox.env server/seed.js`) refuses to run outside sandbox, migrates, and does nothing if any user exists. It creates 39 accounts (one per profile and country, plus administrators) with PIN 2580 and drives every action through the engine, settling partner operations itself, so balances match the ledger. To reseed: the **Recommencer la démo** button on the sign-in screen (`POST /api/sandbox/reset`: truncates every table except `schema_migrations`, then seeds again; refused unless `NEXUS_ENV=sandbox`, hidden with `SANDBOX_RESET=off`), or drop and recreate the `nexus` database, then seed. Never point a sandbox or test run at a live `DATABASE_URL`: the tests drop the `public` schema.
 
 ## Scheduler
 

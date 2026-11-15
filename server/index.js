@@ -19,6 +19,7 @@ import { handleWebhook, startOutboxWorker, resolveLink } from './rails.js'
 import { startScheduler } from './scheduler.js'
 import { loadCatalog, startCatalogSync } from './catalog-runtime.js'
 import { personaChoices, switchPersona } from './drift.js'
+import { LOCALES } from './i18n.js'
 import { ctxFor } from './context.js'
 
 const dist = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'dist')
@@ -107,6 +108,13 @@ api.post('/me/closure', limit(5, req => req.userId), async (req, res) => {
 })
 api.get('/home', async (req, res) => res.json(await engine.home(req.userId)))
 // Profile drift and choice: the profiles a person may move to, and the switch itself (explicit, audited, 30-day cooldown).
+// Interface language, kept on the account so the server's words follow it.
+api.post('/me/locale', async (req, res) => {
+  const locale = String(req.body?.locale ?? '')
+  if (!LOCALES.includes(locale)) return res.status(400).json({ error: 'Langue non disponible' })
+  await pool.query('UPDATE users SET locale=$2 WHERE id=$1', [req.userId, locale])
+  res.json({ ok: true, locale })
+})
 api.get('/me/personas', async (req, res) => res.json(await personaChoices(await ctxFor(pool, req.userId))))
 api.post('/me/persona', limit(10, req => req.userId), async (req, res) => res.json(await tx(async c => switchPersona(await ctxFor(c, req.userId, req.ip), String(req.body?.to ?? '')))))
 api.get('/modules/:id', async (req, res) => res.json(await engine.moduleView(req.userId, req.params.id)))

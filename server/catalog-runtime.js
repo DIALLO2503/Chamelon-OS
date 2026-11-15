@@ -14,6 +14,7 @@ import { log } from './log.js'
 const clone = o => JSON.parse(JSON.stringify(o))
 const BASE = clone(REGIONS)          // the code catalog, after CUSTODY_<ID> overrides
 const BASE_FX = { ...FX_E8_PER_EUR }
+const BASE_PRICING = clone(PRICING)
 const SYNC_MS = Number(process.env.CATALOG_SYNC_MS || 30000)
 let mods = null                       // the module registry, set by engine.js (avoids an import cycle)
 let activeId = null
@@ -41,15 +42,20 @@ export function merge(overlay = {}) {
     regions[rid] = next
   }
   const closed = new Set(Array.isArray(overlay.closed) ? overlay.closed : [])
-  return { regions, fx, closed }
+  // Prices are part of the OS too: escrowFeeBps, remitFeeByLevel, remitFee, agentCommissionBps, advance (merged key by key).
+  const pricing = { ...clone(BASE_PRICING), ...clone(overlay.pricing ?? {}) }
+  return { regions, fx, closed, pricing }
 }
 
 // Everything that would stop this overlay from being activated, as plain sentences. Empty = valid.
 export async function overlayErrors(overlay, client = pool) {
   let merged
   try { merged = merge(overlay) } catch (e) { return [e.message] }
-  const { regions, fx, closed } = merged
+  const { regions, fx, closed, pricing } = merged
   const errors = catalogErrors(mods, regions, fx)
+  const bps = pricing.escrowFeeBps
+  if (!Number.isInteger(bps) || bps < 0 || bps > 500) errors.push('pricing.escrowFeeBps : entier de 0 à 500 (5 %)')
+  if (!Array.isArray(pricing.remitFeeByLevel) || pricing.remitFeeByLevel.length !== 4 || pricing.remitFeeByLevel.some(x => typeof x !== 'number' || x < 0 || x > 1)) errors.push('pricing.remitFeeByLevel : 4 parts entre 0 et 1')
   for (const key of closed) {
     const [rid, pid] = key.split('.')
     if (!regions[rid] || (pid && !regions[rid].personas[pid])) errors.push(`closed: ${key} n’existe pas`)
@@ -64,12 +70,13 @@ export async function overlayErrors(overlay, client = pool) {
     // Same live guards as config.js applies at boot: an open region must be servable.
     if (!config.sandbox && r.custody === 'held' && config.provider !== 'partner') errors.push(`${rid} : le stade held exige un partenaire de paiement`)
     if (config.sms.provider === 'smsgate' && !config.smsgate.default && !config.smsgate.byRegion[rid]) errors.push(`${rid} : aucun téléphone passerelle SMS configuré pour ce pays`)
-    for (const c of r.corridors ?? []) if (PRICING.remitFee[r.currency?.code] === undefined) errors.push(`${rid} : couloir ${c} sans frais d’envoi pour ${r.currency?.code}`)
+    for (const c of r.corridors ?? []) if (pricing.remitFee[r.currency?.code] === undefined) errors.push(`${rid} : couloir ${c} sans frais d’envoi pour ${r.currency?.code}`)
   }
   return [...new Set(errors)]
 }
 
-function apply({ regions, fx, closed }) {
+function apply({ regions, fx, closed, pricing }) {
+  Object.assign(PRICING, pricing)
   for (const k of Object.keys(REGIONS)) delete REGIONS[k]
   Object.assign(REGIONS, regions)
   Object.assign(FX_E8_PER_EUR, fx)

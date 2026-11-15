@@ -17,6 +17,7 @@ import inbox from './modules/inbox.js'
 import pos from './modules/pos.js'
 import advance from './modules/advance.js'
 import { setModules } from './catalog-runtime.js'
+import { tr } from './i18n.js'
 import { driftSuggestion } from './drift.js'
 
 export const MODS = { wallet, tontine, escrow, jobs, remit, family, orders, creditbook, invoices, shifts, budget, float, score, pos, advance, inbox }
@@ -24,7 +25,8 @@ validateCatalog(MODS)
 setModules(MODS) // the runtime catalog validates new regions and profiles against the same registry
 
 const INTENT_TTL_MIN = 10
-const label = (ctx, text) => fill(text, ctx.region.vocab)
+// Module names and quick actions in the person's language (server/i18n.js), then the country's own words.
+const label = (ctx, text) => fill(tr(text, ctx.user.locale), ctx.region.vocab)
 
 function enabledModules(ctx) {
   return [...new Set([...ctx.persona.nav, ...ctx.region.modules])].filter(id => moduleAvailable(ctx.region, id))
@@ -130,7 +132,7 @@ export async function me(userId) {
   const pendingRoles = (await c.query(`SELECT role FROM roles WHERE user_id=$1 AND status='pending'`, [userId])).rows.map(r => r.role)
   const unread = (await one(c, 'SELECT count(*)::int AS n FROM notifications WHERE user_id=$1 AND read_at IS NULL', [userId])).n
   return {
-    user: { id: ctx.user.id, name: ctx.user.name, phone: ctx.user.phone, region: ctx.user.region, persona: ctx.user.persona, kycLevel: ctx.user.kyc_level, pendingRoles, isAdmin: ctx.hasRole('admin') },
+    user: { id: ctx.user.id, name: ctx.user.name, phone: ctx.user.phone, region: ctx.user.region, persona: ctx.user.persona, kycLevel: ctx.user.kyc_level, locale: ctx.user.locale, pendingRoles, isAdmin: ctx.hasRole('admin') },
     experience: await experience(c, ctx), unread,
     sandbox: config.sandbox, // the interface offers a quick "change account" for testing every profile
   }

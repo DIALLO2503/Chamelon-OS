@@ -50,6 +50,8 @@ export const config = {
   publicUrl: (env.PUBLIC_URL || env.RENDER_EXTERNAL_URL || `http://localhost:${env.PORT || 3001}`).replace(/\/$/, ''),
   trustProxy: env.TRUST_PROXY ? Number(env.TRUST_PROXY) : 0,
   uploadDir: env.UPLOAD_DIR || path.join(root, '.local', 'uploads'),
+  // STORAGE=s3: photos in an S3-compatible object store (S3, R2, MinIO…) instead of the server's disk.
+  storage: { kind: env.STORAGE || 'disk', bucket: env.S3_BUCKET, region: env.S3_REGION || 'auto', endpoint: env.S3_ENDPOINT, accessKeyId: env.S3_ACCESS_KEY_ID, secretAccessKey: env.S3_SECRET_ACCESS_KEY },
   // Payment rails for "held" custody: sandbox simulates a licensed partner; partner calls a real one over HTTP.
   provider: env.PAYMENT_PROVIDER || (NEXUS_ENV === 'live' ? 'partner' : 'sandbox'),
   partner: { baseUrl: env.PARTNER_BASE_URL, apiKey: env.PARTNER_API_KEY, webhookSecret: env.PARTNER_WEBHOOK_SECRET || (NEXUS_ENV === 'live' ? undefined : 'sandbox-webhook-secret') },
@@ -109,6 +111,8 @@ if (config.sms.provider) {
     if (missing.length) throw new Error(`SMS_PROVIDER=smsgate requires SMSGATE_USER/SMSGATE_PASSWORD, or SMSGATE_<ID>_USER/_PASSWORD for each open country (missing: ${missing.join(', ')})`)
   }
 }
+if (!['disk', 's3'].includes(config.storage.kind)) throw new Error('STORAGE must be "disk" or "s3"')
+if (config.storage.kind === 's3' && (!config.storage.bucket || !config.storage.accessKeyId || !config.storage.secretAccessKey)) throw new Error('STORAGE=s3 requires S3_BUCKET, S3_ACCESS_KEY_ID and S3_SECRET_ACCESS_KEY')
 if (!['log', 'sms', 'whatsapp'].includes(config.notifier)) throw new Error('NOTIFIER must be "log", "sms" or "whatsapp"')
 if (config.notifier !== 'log' && !config.sms.provider) throw new Error(`NOTIFIER=${config.notifier} requires SMS_PROVIDER`)
 if (config.notifier === 'whatsapp' && config.sms.provider !== 'twilio') throw new Error('NOTIFIER=whatsapp requires SMS_PROVIDER=twilio')

@@ -65,7 +65,10 @@ export const FX_E8_PER_EUR = { EUR: 100000000n, MAD: 1085000000n, XOF: 655957000
 // advance: earned-wage advances (modules/advance.js). share of average monthly earnings received on Nexus, cap and flat fee in
 // minor units per currency (placeholders until the lender's tariff is signed), repayment term, minimum account age and earning days.
 export const PRICING = {
-  remitFee: { EUR: 150, AED: 500 }, remitFeeByLevel: [1, 1, 0.5, 0], agentCommissionBps: 50,
+  // remitFeeByLevel: no level is free (a quarter of the fee at the top level), so the best customers still cover the corridor cost.
+  remitFee: { EUR: 150, AED: 500 }, remitFeeByLevel: [1, 1, 0.5, 0.25], agentCommissionBps: 50,
+  // escrowFeeBps: protection fee on escrow releases, taken from the payee (0 until the pilot sets it in the runtime catalog).
+  escrowFeeBps: 0,
   advance: { share: 0.3, cap: { XOF: 150000, AED: 200000, EUR: 30000 }, fee: { XOF: 1000, AED: 1500, EUR: 300 }, termDays: 30, minAgeDays: 60, minEarningDays: 6 },
 }
 

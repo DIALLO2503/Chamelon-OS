@@ -1,6 +1,6 @@
 import { one, all, transition } from '../db.js'
 import { config } from '../config.js'
-import { REGIONS, CURRENCIES } from '../catalog.js'
+import { REGIONS, CURRENCIES, PRICING } from '../catalog.js'
 import { post, expand, legs, sys } from '../ledger.js'
 import { fail, newId, convert, fmt, mask, money } from '../core.js'
 import { walletOf, rowsBlock, partyById, userById } from '../context.js'
@@ -90,19 +90,27 @@ collectionHandlers.escrow_fund = async (client, op) => {
 payoutHandlers.failed.escrow_release = async (client, op, source) => {
   const e = await one(client, 'SELECT * FROM escrows WHERE id=$1 FOR UPDATE', [op.purpose.escrowId])
   const escrowAcc = await escrowAccount(client, e.currency)
-  if (source.id !== escrowAcc.id) await post(client, { kind: 'payout_reversed', idem: `refx:${op.id}`, lines: await expand(client, [legs(source, escrowAcc, op.amount, e.amount)]) })
+  const fee = op.purpose.fee ?? 0
+  if (source.id !== escrowAcc.id) await post(client, { kind: 'payout_reversed', idem: `refx:${op.id}`, lines: await expand(client, [legs(source, escrowAcc, op.amount, e.amount - fee)]) })
+  if (fee > 0) await post(client, { kind: 'payout_reversed', idem: `refee:${op.id}`, lines: [{ account: await sys(client, 'fees', e.currency), amount: -fee }, { account: escrowAcc, amount: fee }] })
   await transition(client, 'escrows', e.id, 'released', 'held', { release_to: null, auto_release_at: null })
   if (e.stage_id) await client.query(`UPDATE job_stages SET status='done' WHERE id=$1 AND status='paid'`, [e.stage_id])
   if (e.order_id) await client.query(`UPDATE orders SET status='delivered' WHERE id=$1 AND status='completed'`, [e.order_id])
   for (const pid of [e.payer_party, e.payee_party]) await notify(client, { partyId: pid, template: 'escrow.payout_failed', text: `Le versement pour « ${e.title} » a échoué (numéro mobile money refusé). Les fonds sont de nouveau bloqués ; vérifiez le numéro du bénéficiaire.` })
 }
 
+// Protection fee (PRICING.escrowFeeBps, set per country through the runtime catalog): taken from what the payee receives,
+// at release only, and given back if the payout to the payee fails.
+export const escrowFee = amount => Math.floor(amount * (PRICING.escrowFeeBps ?? 0) / 10000)
+
 export async function releaseEscrow(client, e, reason = 'Fonds libérés') {
   const payee = await partyById(client, e.payee_party)
   const updated = await transition(client, 'escrows', e.id, ['held', 'disputed'], 'released')
-  const r = await deliver(client, { source: await escrowAccount(client, e.currency), amount: e.amount, toParty: payee, title: `${reason} : ${e.title}`, purpose: { type: 'escrow_release', escrowId: e.id, amount: e.amount, currency: e.currency }, kind: 'escrow_release' })
+  const source = await escrowAccount(client, e.currency), fee = escrowFee(e.amount)
+  if (fee > 0) await post(client, { kind: 'escrow_fee', idem: `escrow-fee:${e.id}:${Date.now()}`, lines: [{ account: source, amount: -fee }, { account: await sys(client, 'fees', e.currency), amount: fee }] })
+  const r = await deliver(client, { source, amount: e.amount - fee, toParty: payee, title: `${reason} : ${e.title}`, purpose: { type: 'escrow_release', escrowId: e.id, amount: e.amount - fee, currency: e.currency, fee }, kind: 'escrow_release' })
   await client.query('UPDATE escrows SET release_to=$2 WHERE id=$1', [e.id, r.via])
-  await notify(client, { partyId: payee.id, template: 'escrow.released', text: `${fmt(r.received, CURRENCIES[r.currency])} vous ont été versés pour « ${e.title} »${r.via === 'payout' ? ' sur votre mobile money' : ''}.` })
+  await notify(client, { partyId: payee.id, template: 'escrow.released', text: `${fmt(r.received, CURRENCIES[r.currency])} vous ont été versés pour « ${e.title} »${r.via === 'payout' ? ' sur votre mobile money' : ''}${fee ? ` (frais de protection : ${money(fee, e.currency)})` : ''}.` })
   await hook(client, updated, 'released')
   return r
 }

@@ -1,7 +1,14 @@
 import { useEffect, useState } from 'react'
+import { t, LANGS, currentLang, setLang } from './i18n.js'
 import { api, session } from './api.js'
 import Icon from './ui/Icon.jsx'
 import PinPad from './ui/PinPad.jsx'
+
+// Language before anything else: the sign-in screen is the first thing a person reads.
+function LangPicker() {
+  const [, redraw] = useState(0)
+  return <select className="lang-pick" aria-label="Langue" value={currentLang()} onChange={e => { setLang(e.target.value); redraw(x => x + 1) }}>{LANGS.map(([id, name]) => <option key={id} value={id}>{name}</option>)}</select>
+}
 
 const groupBy = accounts => [...accounts.reduce((m, a) => m.set(a.group, [...(m.get(a.group) ?? []), a]), new Map())]
 
@@ -87,22 +94,22 @@ export default function Auth({ onDone }) {
   return (
     <div className="shell auth" style={{ '--hue': persona?.hue }}>
       <div className="screen">
-        <div className="brand">Nexus</div>
+        <div className="brand-row"><div className="brand">Nexus</div><LangPicker /></div>
 
         {step === 'phone' && (
           <form onSubmit={e => { e.preventDefault(); requestCode(dial + number.replace(/\s/g, '').replace(/^0/, '')) }}>
-            <h1 className="screen-title">Votre numéro de téléphone</h1>
+            <h1 className="screen-title">{t('Votre numéro de téléphone')}</h1>
             <div className="field">
-              <label htmlFor="auth-number">Nous vous envoyons un code pour vérifier que c’est bien vous.</label>
+              <label htmlFor="auth-number">{t('Nous vous envoyons un code pour vérifier que c’est bien vous.')}</label>
               <div className="phone-row">
                 <select aria-label="Indicatif du pays" value={dial} onChange={e => setDial(e.target.value)}>{regions.map(r => <option key={r.id} value={r.dialCode}>{r.dialCode} {r.name}</option>)}</select>
                 <input id="auth-number" type="tel" inputMode="tel" autoComplete="tel-national" value={number} onChange={e => setNumber(e.target.value)} />
               </div>
             </div>
-            <button className="cta" disabled={busy || number.replace(/\D/g, '').length < 6}>Recevoir le code</button>
+            <button className="cta" disabled={busy || number.replace(/\D/g, '').length < 6}>{t('Recevoir le code')}</button>
             {sandbox.accounts.length > 0 && (
               <section className="sec">
-                <h2>Comptes de démonstration</h2>
+                <h2>{t('Comptes de démonstration')}</h2>
                 <p className="muted">Bac à sable : argent fictif, partenaire simulé. Un compte par profil et par pays. Code secret de tous les comptes : <strong>{sandbox.pin}</strong>.</p>
                 {groupBy(sandbox.accounts).map(([group, accounts]) => (
                   <div key={group} className="demo-group">
@@ -124,22 +131,22 @@ export default function Auth({ onDone }) {
 
         {step === 'code' && (
           <form onSubmit={e => { e.preventDefault(); verify() }}>
-            <h1 className="screen-title">Entrez le code</h1>
+            <h1 className="screen-title">{t('Entrez le code')}</h1>
             <div className="field">
               <label htmlFor="auth-code">Code à 6 chiffres envoyé au {phone}</label>
               <input id="auth-code" className="otp" inputMode="numeric" autoComplete="one-time-code" maxLength={6} value={code} onChange={e => setCode(e.target.value.replace(/\D/g, ''))} />
             </div>
             {sandboxCode && <p className="info">Bac à sable : aucun SMS n’est envoyé. Votre code est <button type="button" className="link" onClick={() => setCode(sandboxCode)}>{sandboxCode}</button>.</p>}
-            <button className="cta" disabled={busy || code.length < 6}>Valider</button>
-            <button type="button" className="cta quiet" onClick={() => { setStep('phone'); setError('') }}>Changer de numéro</button>
+            <button className="cta" disabled={busy || code.length < 6}>{t('Valider')}</button>
+            <button type="button" className="cta quiet" onClick={() => { setStep('phone'); setError('') }}>{t('Changer de numéro')}</button>
           </form>
         )}
 
         {step === 'pin' && (
           <>
             <h1 className="screen-title">Bonjour {returning.split(' ')[0]}</h1>
-            <PinPad label="Votre code secret" busy={busy} error={error} onSubmit={login} />
-            <button type="button" className="cta quiet" disabled={busy} onClick={() => { setFirstPin(''); setError(''); setStep('reset1') }}>Code secret oublié ?</button>
+            <PinPad label={t('Votre code secret')} busy={busy} error={error} onSubmit={login} />
+            <button type="button" className="cta quiet" disabled={busy} onClick={() => { setFirstPin(''); setError(''); setStep('reset1') }}>{t('Code secret oublié ?')}</button>
           </>
         )}
         {step === 'reset1' && (

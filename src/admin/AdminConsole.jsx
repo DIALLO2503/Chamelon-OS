@@ -137,6 +137,9 @@ function UserDetail({ id, onBack }) {
           <div className="adm-buttons">
             <ActionButton label={u.frozen ? 'Lever la suspension' : 'Suspendre le compte'} tone={u.frozen ? '' : 'bad'} confirm disabled={needReason}
               run={() => api(`/admin/users/${u.id}/freeze`, { body: { frozen: !u.frozen, reason } })} onDone={reload} />
+            {u.closure_requested_at && !u.erased_at && <ActionButton label="Effacer les données (irréversible)" tone="bad" confirm disabled={needReason}
+              run={() => api(`/admin/users/${u.id}/erase`, { body: { reason } })} onDone={reload} />}
+            {u.erased_at && <span className="pill bad">Données effacées</span>}
           </div>
           <div className="adm-search-row">
             <select aria-label="Niveau KYC" value={level} onChange={e => setLevel(e.target.value)}>

@@ -189,9 +189,10 @@ export async function computeScore(client, user, party) {
   const people = (await one(client, `SELECT count(DISTINCT cp)::int AS n FROM (
       SELECT CASE WHEN payer_party=$1 THEN payee_party ELSE payer_party END AS cp FROM recorded_payments WHERE status='confirmed' AND (payer_party=$1 OR payee_party=$1)
       UNION SELECT CASE WHEN payer_party=$1 THEN payee_party ELSE payer_party END FROM escrows WHERE status IN ('released','paid') AND (payer_party=$1 OR payee_party=$1)
-      UNION SELECT p.cp_party FROM postings p JOIN accounts a ON a.id=p.account_id WHERE a.owner=$2 AND a.kind='wallet' AND p.cp_party IS NOT NULL) x`, [pid, user.id])).n
+      UNION SELECT d.cp_party FROM postings p JOIN posting_details d ON d.posting_id=p.id JOIN accounts a ON a.id=p.account_id WHERE a.owner=$2 AND a.kind='wallet' AND d.cp_party IS NOT NULL) x`, [pid, user.id])).n
   const contribs = await tontine.contributions(client, pid)
   const late = await tontine.lateFor(client, pid)
+  const defaults = await tontine.defaultsFor(client, pid)
   const kept = await escrow.kept(client, pid)
   const confirmed = (await one(client, `SELECT count(*)::int AS n FROM recorded_payments WHERE status='confirmed' AND (payer_party=$1 OR payee_party=$1)`, [pid])).n
   const lost = (await one(client, `SELECT count(*)::int AS n FROM disputes WHERE status='resolved' AND resolution->>'against' = $1`, [pid])).n
@@ -201,7 +202,7 @@ export async function computeScore(client, user, party) {
     ['Engagements tenus (acomptes et étapes payés)', kept, 10, 300],
     ['Ancienneté du compte', age, 180, 150],
   ].map(([label, n, cap, weight]) => ({ label, pct: Math.min(1, n / cap), weight }))
-  const penalty = late * 40 + lost * 120
+  const penalty = late * 40 + defaults * 60 + lost * 120
   const value = Math.max(0, Math.round(signals.reduce((s, x) => s + x.pct * x.weight, 0)) - penalty)
   const level = LEVELS.findLastIndex(([min]) => value >= min)
   // One tile per kept commitment; a person who confirms many payments still fills at most three tiles.

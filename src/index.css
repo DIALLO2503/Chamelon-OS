@@ -242,3 +242,11 @@ input:focus, select:focus { outline: none; border-color: var(--accent); }
 .badge-earned > svg { color: var(--ok); }
 .badges-note { display: flex; gap: 8px; align-items: flex-start; font-size: 0.85em; }
 .row.locked { width: 100%; text-align: left; color: inherit; }
+
+/* Language picker on the sign-in screen; right-to-left layout for Arabic (html[dir=rtl] set by src/i18n.js). */
+.brand-row { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
+.lang-pick { width: auto; flex: none; min-height: 36px; padding: 0 10px; border-radius: 999px; border: 1px solid var(--line); background: var(--card); color: var(--fg); font: inherit; font-size: 0.875em; }
+[dir='rtl'] .row-main, [dir='rtl'] .head, [dir='rtl'] .chip-row, [dir='rtl'] .bal-row, [dir='rtl'] .scorecard, [dir='rtl'] .brand-row { direction: rtl; }
+[dir='rtl'] .row-end, [dir='rtl'] .row-value { text-align: left; }
+[dir='rtl'] .num { direction: ltr; unicode-bidi: isolate; }
+[dir='rtl'] svg[aria-hidden='true'].lucide-chevron-right { transform: scaleX(-1); }

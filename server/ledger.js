@@ -64,8 +64,10 @@ export async function post(client, { kind, idem = null, lines }) {
   await client.query('SELECT id FROM accounts WHERE id = ANY($1::uuid[]) ORDER BY id FOR UPDATE', [ids])
   await checkLimits(client, kind, lines)
   for (const l of lines) {
-    await client.query('INSERT INTO postings (entry_id, account_id, amount, title, cp_party, ref, icon) VALUES ($1,$2,$3,$4,$5,$6,$7)',
-      [id, l.account.id, l.amount, l.title ?? null, l.cpParty ?? null, l.ref ?? null, l.icon ?? null])
+    // The posting itself carries no personal data; its label and counterparty go to posting_details (erasable).
+    const posted = await one(client, 'INSERT INTO postings (entry_id, account_id, amount, ref, icon) VALUES ($1,$2,$3,$4,$5) RETURNING id',
+      [id, l.account.id, l.amount, l.ref ?? null, l.icon ?? null])
+    if (l.title || l.cpParty) await client.query('INSERT INTO posting_details (posting_id, title, cp_party) VALUES ($1,$2,$3)', [posted.id, l.title ?? null, l.cpParty ?? null])
     try {
       await client.query('UPDATE accounts SET balance = balance + $1 WHERE id=$2', [l.amount, l.account.id])
     } catch (e) {
@@ -98,8 +100,9 @@ export async function expand(client, parts) {
 }
 
 export const feed = (client, accountId, limit) => all(client,
-  `SELECT p.amount, p.title, p.icon, p.ref, p.created_at, pa.name AS cp_name, pa.user_id AS cp_user
-   FROM postings p LEFT JOIN parties pa ON pa.id = p.cp_party WHERE p.account_id=$1 ORDER BY p.id DESC LIMIT $2`, [accountId, limit])
+  `SELECT p.amount, d.title, p.icon, p.ref, p.created_at, pa.name AS cp_name, pa.user_id AS cp_user
+   FROM postings p LEFT JOIN posting_details d ON d.posting_id = p.id LEFT JOIN parties pa ON pa.id = d.cp_party
+   WHERE p.account_id=$1 ORDER BY p.id DESC LIMIT $2`, [accountId, limit])
 
 // Any row returned means a cached balance disagrees with its postings.
 export const reconcile = client => all(client, `

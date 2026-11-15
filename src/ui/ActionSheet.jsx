@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { t } from '../i18n.js'
 import { api, uploadImage } from '../api.js'
 import { useApp } from '../App.jsx'
 import Icon from './Icon.jsx'
@@ -104,8 +105,8 @@ export default function ActionSheet({ module, action, row, onClose, onDone }) {
             {form.info && <p className="info">{form.info}</p>}
             {form.fields.map(f => <Field key={f.name} field={f} value={values[f.name]} symbol={me.experience.region.currency.symbol} onChange={v => setValues(s => ({ ...s, [f.name]: v }))} />)}
             {error && <p className="error" role="alert">{error}</p>}
-            {form.blocked ? <button type="button" className="cta quiet" onClick={close}>Fermer</button>
-              : form.fields.length > 0 && <button className="cta" disabled={busy || missing}>{form.needsReview ? 'Voir le récapitulatif' : 'Enregistrer'}</button>}
+            {form.blocked ? <button type="button" className="cta quiet" onClick={close}>{t('Fermer')}</button>
+              : form.fields.length > 0 && <button className="cta" disabled={busy || missing}>{form.needsReview ? t('Voir le récapitulatif') : t('Enregistrer')}</button>}
             {!form.blocked && form.fields.length === 0 && busy && <div className="skeleton" style={{ height: 60 }} />}
           </form>
         )}
@@ -115,8 +116,8 @@ export default function ActionSheet({ module, action, row, onClose, onDone }) {
             <dl className="review">{quote.review.lines.map(([label, value, strong]) => <div key={label} className={strong ? 'strong' : ''}><dt>{label}</dt><dd className="num">{value}</dd></div>)}</dl>
             {error && <p className="error" role="alert">{error}</p>}
             <button className="cta" disabled={busy} onClick={() => { setError(''); setStep('pin') }}><Icon name="lock" size={18} /> {quote.review.cta}</button>
-            {form.fields.length > 0 && <button className="cta quiet" disabled={busy} onClick={() => { setStep('form'); setError('') }}>Modifier</button>}
-            <p className="hint center">Ce récapitulatif est valable 10 minutes.</p>
+            {form.fields.length > 0 && <button className="cta quiet" disabled={busy} onClick={() => { setStep('form'); setError('') }}>{t('Modifier')}</button>}
+            <p className="hint center">{t('Ce récapitulatif est valable 10 minutes.')}</p>
           </>
         )}
 
@@ -126,7 +127,7 @@ export default function ActionSheet({ module, action, row, onClose, onDone }) {
           <>
             <div className="done"><Icon name="circle-check" size={44} /><p>{done.message}</p>{done.copy && <CopyButton text={done.copy} label={done.copy} />}</div>
             {done.share && <ShareButtons share={done.share} />}
-            <button className="cta quiet" onClick={close}>Terminé</button>
+            <button className="cta quiet" onClick={close}>{t('Terminé')}</button>
           </>
         )}
 
