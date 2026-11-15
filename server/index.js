@@ -17,6 +17,9 @@ import { uploadRoutes, publicUploadRoutes } from './uploads.js'
 import { adminRoutes } from './admin.js'
 import { handleWebhook, startOutboxWorker, resolveLink } from './rails.js'
 import { startScheduler } from './scheduler.js'
+import { loadCatalog, startCatalogSync } from './catalog-runtime.js'
+import { personaChoices, switchPersona } from './drift.js'
+import { ctxFor } from './context.js'
 
 const dist = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'dist')
 const testing = config.env === 'test'
@@ -103,6 +106,9 @@ api.post('/me/closure', limit(5, req => req.userId), async (req, res) => {
   res.json({ ok: true, message: 'Demande enregistrée. Notre équipe vous contacte avant de fermer le compte.' })
 })
 api.get('/home', async (req, res) => res.json(await engine.home(req.userId)))
+// Profile drift and choice: the profiles a person may move to, and the switch itself (explicit, audited, 30-day cooldown).
+api.get('/me/personas', async (req, res) => res.json(await personaChoices(await ctxFor(pool, req.userId))))
+api.post('/me/persona', limit(10, req => req.userId), async (req, res) => res.json(await tx(async c => switchPersona(await ctxFor(c, req.userId, req.ip), String(req.body?.to ?? '')))))
 api.get('/modules/:id', async (req, res) => res.json(await engine.moduleView(req.userId, req.params.id)))
 api.get('/modules/:id/actions/:action', async (req, res) => res.json(await engine.actionForm(req.userId, req.params.id, req.params.action, req.query.row ?? null)))
 api.post('/modules/:id/actions/:action', limit(60, req => req.userId), async (req, res) => res.json(await engine.perform(req.userId, req.params.id, req.params.action, { row: req.body?.row ?? null, input: req.body?.input, ...ctxArgs(req) })))
@@ -147,6 +153,8 @@ app.use((err, req, res, _next) => {
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
   await migrate()
+  await loadCatalog()
+  startCatalogSync()
   startOutboxWorker()
   startScheduler()
   app.listen(config.port, () => log.info(`Nexus API on :${config.port} (${config.env})`))

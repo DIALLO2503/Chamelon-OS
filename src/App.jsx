@@ -65,6 +65,43 @@ function DataRights() {
   )
 }
 
+// The person's profile: the drift suggestion when their activity has outgrown it, and the profiles they may move to.
+// A switch keeps every record, balance and reputation point; the server enforces consent, cooldown and restrictions.
+function Profile() {
+  const { me, refresh } = useApp()
+  const [data, setData] = useState(null)
+  const [open, setOpen] = useState(false)
+  const [state, setState] = useState({ busy: '', error: '', confirm: '' })
+  useEffect(() => { api('/me/personas').then(setData).catch(() => {}) }, [me.experience.persona.id])
+  if (!data) return null
+  const go = async to => {
+    if (state.confirm !== to) return setState({ busy: '', error: '', confirm: to })
+    setState({ busy: to, error: '', confirm: '' })
+    try { await api('/me/persona', { body: { to } }); refresh() } catch (e) { setState({ busy: '', error: e.message, confirm: '' }) }
+  }
+  const list = open ? data.choices : data.choices.filter(c => c.suggested)
+  return (
+    <section className="sec">
+      <h2>Votre profil</h2>
+      <div className="card">
+        <div className="row"><div className="row-main"><span className="disc soft small"><Icon name={me.experience.persona.icon} size={16} /></span><div className="grow"><div className="row-title">{me.experience.persona.label}</div><div className="muted">Votre application est construite pour ce métier.</div></div></div></div>
+        {data.suggestion && <div className="insight"><Icon name="sparkles" size={22} /><div><p>{data.suggestion.why} : votre activité ressemble à celle du profil « {data.suggestion.label} ».</p></div></div>}
+        {list.map(c => (
+          <div key={c.id} className="row"><div className="row-main">
+            <span className="disc soft small"><Icon name={c.icon} size={16} /></span>
+            <div className="grow"><div className="row-title">{c.label} {c.tier > 1 && <span className="pill">Tier {c.tier}</span>}</div><div className="muted">{c.tagline}</div></div>
+            <button className={`chip-btn ${c.suggested ? 'primary' : ''}`} disabled={Boolean(data.cooldownUntil) || state.busy === c.id} onClick={() => go(c.id)}>{state.confirm === c.id ? 'Confirmer' : 'Passer à ce profil'}</button>
+          </div></div>
+        ))}
+        {data.cooldownUntil && <div className="row muted">Prochain changement possible le {new Intl.DateTimeFormat('fr-FR', { day: 'numeric', month: 'long' }).format(new Date(data.cooldownUntil))}.</div>}
+        {data.choices.length > 0 && <button className="row row-main" onClick={() => setOpen(o => !o)}><div className="grow muted">{open ? 'Masquer les autres profils' : `Voir les autres profils (${data.choices.length})`}</div><Icon name={open ? 'chevron-left' : 'chevron-right'} size={16} /></button>}
+      </div>
+      {state.error && <p className="error" role="alert">{state.error}</p>}
+      <p className="muted">Changer de profil garde vos paiements, vos soldes et votre réputation. Un changement tous les 30 jours au plus.</p>
+    </section>
+  )
+}
+
 function Services({ openAdmin }) {
   const { me, setTab, logout } = useApp()
   const { user, experience } = me
@@ -90,6 +127,7 @@ function Services({ openAdmin }) {
           <p className="muted">Les services s’ouvrent au fur et à mesure que votre réputation grandit : chaque paiement confirmé, cotisation versée ou étape validée compte.</p>
         </section>
       )}
+      <Profile />
       {user.pendingRoles.length > 0 && <div className="insight notice"><Icon name="clock" size={22} /><div><p>Votre demande d’agrément est en cours de vérification par notre équipe.</p></div></div>}
       <div className="card account">
         <div><strong>{user.name}</strong><div className="muted">{user.phone} · {KYC[user.kycLevel]}</div></div>
@@ -119,7 +157,7 @@ function MainApp() {
   if (!me) return <div className="boot"><Icon name="loader-circle" size={28} /></div>
 
   const { experience, user } = me
-  const ctx = { me, version, tab, setTab, logout, openAction: (module, action, row = null) => setSheet({ module, action, row }) }
+  const ctx = { me, version, tab, setTab, logout, refresh: () => { setVersion(v => v + 1); setTab('home') }, openAction: (module, action, row = null) => setSheet({ module, action, row }) }
   const current = experience.nav.some(m => m.id === tab) ? tab : 'services'
   const homeHead = (
     <header className="head">

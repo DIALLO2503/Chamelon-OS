@@ -50,6 +50,15 @@ const USERS = [
   ['fotso', '+237650000003', 'Emmanuel Fotso', 'CM', 'artisan'],
   ['ibrahim', '+237650000004', 'Ibrahim Moussa', 'CM', 'ouvrier'],
   ['brigitte', '+237650000005', 'Brigitte Atangana', 'CM', 'parent'],
+  // Tier 2 profiles (the organiser one level up), reached by drift or chosen at sign-up.
+  ['rachid', '+212600000006', 'Rachid Tazi BTP', 'MA', 'entreprise'],
+  ['nawal', '+212600000007', 'Nawal Boutique', 'MA', 'boutique_pro'],
+  ['khady', '+221770000006', 'Khady Diop', 'SN', 'boutique_pro', { fund: '650000' }],
+  ['mamadou', '+224620000005', 'Mamadou Bah', 'GN', 'entreprise'],
+  ['koffi', '+2250700000006', 'Koffi Yao', 'CI', 'entreprise'],
+  ['aya', '+2250700000007', 'Aya Kouamé', 'CI', 'boutique_pro'],
+  ['paul', '+237650000006', 'Paul Essomba', 'CM', 'entreprise'],
+  ['clarisse', '+237650000007', 'Clarisse Ngo', 'CM', 'boutique_pro'],
 ]
 
 async function settle() {
@@ -172,6 +181,7 @@ export async function resetDemo() {
   await migrate()
   const tables = (await pool.query(`SELECT tablename FROM pg_tables WHERE schemaname='public' AND tablename <> 'schema_migrations'`)).rows.map(r => `"${r.tablename}"`)
   if (tables.length) await pool.query(`TRUNCATE ${tables.join(', ')} RESTART IDENTITY CASCADE`)
+  ;(await import('./catalog-runtime.js')).resetCatalog() // catalog versions are gone: back to the code catalog
   await seedDemo()
   return USERS.length
 }

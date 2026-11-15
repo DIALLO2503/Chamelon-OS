@@ -81,8 +81,10 @@ const shop = (label, hue = 20) => ({
   actions: ['addCredit', 'collect', 'collectRecorded', 'recordIn', 'receive', 'paySupplier', 'send'],
   home: [w('balance'), w('actions'), w('insight'), w('trend', 'Encaissements'), w('kpis', 'Carnet de crédit', { module: 'creditbook' }), w('rows', 'Crédits en cours', { module: 'creditbook' }), w('reputation', 'Votre {reputation}'), w('feed', 'Activité')],
 })
+// drift: when a Tier 1 profile shows the signals of the next tier, the app proposes the switch (drift.js); the person decides.
 const seller = tagline => ({
   label: 'Vendeuse en ligne', tagline, icon: 'shopping-bag', hue: 340,
+  drift: [{ to: 'boutique_pro', signal: 'orders_paid_30d', min: 20 }],
   nav: ['orders', 'escrow', 'tontine'],
   actions: ['paymentLink', 'collect', 'collectRecorded', 'requestDeposit', 'recordIn', 'send', 'scan'],
   home: [w('balance'), w('actions'), w('insight'), w('kpis', "Aujourd'hui", { module: 'orders' }), w('trend', 'Ventes encaissées'), w('rows', 'À encaisser', { module: 'orders' }), w('reputation', 'Votre {reputation}'), w('feed', 'Activité')],
@@ -97,10 +99,24 @@ const parent = {
 // Outdoor profiles get a high-contrast interface with larger controls (presentation.contrast).
 const artisan = (label, tagline) => ({
   label, tagline, icon: 'hammer', hue: 60, presentation: { contrast: 'high' },
+  drift: [{ to: 'entreprise', signal: 'crew_people', min: 5 }, { to: 'entreprise', signal: 'jobs_active', min: 3 }],
   nav: ['jobs', 'escrow', 'tontine'],
   actions: ['newJob', 'payCrew', 'requestDeposit', 'recordIn', 'send', 'scan'],
   home: [w('balance'), w('actions'), w('insight'), w('trend', 'Encaissements'), w('rows', 'Chantiers en cours', { module: 'jobs' }), w('rows', 'Acomptes {escrow}', { module: 'escrow' }), w('reputation', 'Votre {reputation}'), w('feed', 'Activité')],
 })
+// Tier 2: the organiser one level up the same value chain (Blueprint V17). Reached by drift or chosen at sign-up.
+const builderCo = {
+  label: 'Entreprise du bâtiment', tagline: 'Plusieurs chantiers et une équipe : acomptes, paie et factures fournisseurs au même endroit.', icon: 'building-2', hue: 25, tier: 2,
+  nav: ['jobs', 'invoices', 'escrow'],
+  actions: ['newJob', 'payCrew', 'paySupplier', 'requestDeposit', 'recordIn', 'send'],
+  home: [w('balance'), w('actions'), w('insight'), w('trend', 'Encaissements'), w('rows', 'Chantiers en cours', { module: 'jobs' }), w('kpis', 'Factures fournisseurs', { module: 'invoices' }), w('reputation', 'Votre {reputation}'), w('feed', 'Activité')],
+}
+const sellerPro = {
+  label: 'Boutique en ligne pro', tagline: 'Des dizaines de commandes par mois : paiements protégés, encaissement et factures fournisseurs.', icon: 'store', hue: 320, tier: 2,
+  nav: ['orders', 'invoices', 'escrow'],
+  actions: ['paymentLink', 'collect', 'collectRecorded', 'paySupplier', 'requestDeposit', 'recordIn'],
+  home: [w('balance'), w('actions'), w('insight'), w('kpis', "Aujourd'hui", { module: 'orders' }), w('trend', 'Ventes encaissées'), w('rows', 'À encaisser', { module: 'orders' }), w('kpis', 'Factures fournisseurs', { module: 'invoices' }), w('reputation', 'Votre {reputation}'), w('feed', 'Activité')],
+}
 const worker = {
   label: 'Ouvrier, journalier', tagline: 'Chantier, atelier ou usine. Chaque paie confirmée construit votre dossier, sans banque.',
   icon: 'hard-hat', hue: 100, presentation: { contrast: 'high' },
@@ -130,6 +146,8 @@ export const REGIONS = {
       ouvrier: worker,
       hanout: shop('Moul hanout'),
       parent,
+      entreprise: builderCo,
+      boutique_pro: sellerPro,
     },
   },
   SN: {
@@ -155,6 +173,7 @@ export const REGIONS = {
       },
       boutique: shop('Boutiquier'),
       parent,
+      boutique_pro: sellerPro,
     },
   },
   GN: {
@@ -168,6 +187,7 @@ export const REGIONS = {
       artisan: artisan('Maçon, artisan', 'Construction pour la diaspora. Faites valider chaque étape, preuve à l’appui.'),
       ouvrier: worker,
       parent,
+      entreprise: builderCo,
     },
   },
   CI: {
@@ -182,6 +202,8 @@ export const REGIONS = {
       artisan: artisan('Artisan du bâtiment', 'Chantiers à Abidjan et pour la diaspora. Faites valider chaque étape, preuve à l’appui.'),
       ouvrier: worker,
       parent,
+      entreprise: builderCo,
+      boutique_pro: sellerPro,
     },
   },
   CM: {
@@ -196,6 +218,8 @@ export const REGIONS = {
       artisan: artisan('Artisan du bâtiment', 'Chantiers à Douala et Yaoundé. Faites valider chaque étape, preuve à l’appui.'),
       ouvrier: worker,
       parent,
+      entreprise: builderCo,
+      boutique_pro: sellerPro,
     },
   },
   FR: {
@@ -247,32 +271,60 @@ for (const [id, r] of Object.entries(REGIONS)) {
 // Accounts that already exist elsewhere keep working; closed countries are simply not offered.
 const open = process.env.SIGNUP_REGIONS?.split(',').map(s => s.trim()).filter(Boolean)
 for (const id of open ?? []) if (!REGIONS[id]) throw new Error(`SIGNUP_REGIONS: unknown country "${id}"`)
-export const regionOpen = id => Boolean(REGIONS[id]) && (!open || open.includes(id))
+// Regions and profiles closed to sign-up by the runtime catalog (catalog-runtime.js): 'MA' or 'MA.parent'.
+// Closing never breaks an existing account: it only stops new sign-ups and switches to that profile.
+export const CLOSED = new Set()
+export const regionOpen = id => Boolean(REGIONS[id]) && (!open || open.includes(id)) && !CLOSED.has(id)
 export const openRegionIds = () => Object.keys(REGIONS).filter(regionOpen)
 
 export const CURRENCIES = Object.fromEntries(Object.values(REGIONS).map(r => [r.currency.code, r.currency]))
+// Rebuilt in place when the runtime catalog adds a region, so every module that imported CURRENCIES sees it.
+export function refreshCurrencies() {
+  for (const k of Object.keys(CURRENCIES)) delete CURRENCIES[k]
+  for (const r of Object.values(REGIONS)) CURRENCIES[r.currency.code] = r.currency
+}
 export const fill = (text, vocab) => text?.replace(/\{(\w+)\}/g, (_, k) => vocab[k] ?? k)
 export const regionOfCurrency = code => Object.keys(REGIONS).find(id => REGIONS[id].currency.code === code)
 
-// Throws at boot if the catalog refers to anything that does not exist, so a typo is never a runtime 500.
-export function validateCatalog(mods) {
+// Signals a profile drift rule may watch (computed in drift.js).
+export const DRIFT_SIGNALS = ['crew_people', 'jobs_active', 'orders_paid_30d', 'payments_in_30d']
+const ICON_RE = /^[a-z0-9-]{2,30}$/, PERSONA_RE = /^[a-z][a-z0-9_]{1,30}$/, REGION_RE = /^[A-Z]{2}$/
+
+export function catalogErrors(mods, regions = REGIONS, fx = FX_E8_PER_EUR) {
   const errors = []
   const check = (ok, msg) => { if (!ok) errors.push(msg) }
   for (const [aid, a] of Object.entries(ACTIONS)) {
     if (a.opens) check(MODULES[a.opens], `action ${aid}: unknown module ${a.opens}`)
     else check(mods[a.module]?.actions[a.action], `action ${aid}: ${a.module}.${a.action} not implemented`)
   }
-  for (const [rid, r] of Object.entries(REGIONS)) {
+  for (const [rid, r] of Object.entries(regions)) {
+    const before = errors.length
+    check(REGION_RE.test(rid), `${rid}: region id must be two capital letters`)
+    check(typeof r.name === 'string' && r.name.length > 1, `${rid}: name required`)
+    check(r.currency && /^[A-Z]{3}$/.test(r.currency.code ?? '') && Number.isInteger(r.currency.decimals) && r.currency.symbol, `${rid}: currency needs code, symbol and decimals`)
+    check(Array.isArray(r.modules) && Array.isArray(r.corridors) && Array.isArray(r.billers) && r.vocab && r.personas, `${rid}: modules, corridors, billers, vocab and personas required`)
+    if (errors.length > before) continue
     check(['record', 'held'].includes(r.custody), `${rid}: custody must be record or held`)
-    check(FX_E8_PER_EUR[r.currency.code], `${rid}: no FX rate for ${r.currency.code}`)
+    check(fx[r.currency.code], `${rid}: no FX rate for ${r.currency.code}`)
     check(/^\+\d{1,4}$/.test(r.dialCode), `${rid}: bad dial code`)
     for (const lvl of [0, 1, 2]) check(r.limits?.[lvl], `${rid}: missing limits for KYC level ${lvl}`)
     for (const m of r.modules) check(mods[m] && MODULES[m], `${rid}: unknown module ${m}`)
     for (const c of r.corridors) {
-      check(REGIONS[c], `${rid}: unknown corridor ${c}`)
+      check(regions[c], `${rid}: unknown corridor ${c}`)
       check(PRICING.remitFee[r.currency.code] !== undefined, `${rid}: corridor ${c} needs a remit fee for ${r.currency.code}`)
     }
     for (const [pid, p] of Object.entries(r.personas)) {
+      check(PERSONA_RE.test(pid), `${rid}.${pid}: profile id must be lowercase letters, digits or _`)
+      check(typeof p.label === 'string' && p.label.length > 1 && p.label.length <= 40, `${rid}.${pid}: label of 2 to 40 characters required`)
+      check(typeof p.tagline === 'string' && p.tagline.length <= 160, `${rid}.${pid}: tagline required (160 characters at most)`)
+      check(ICON_RE.test(p.icon ?? ''), `${rid}.${pid}: icon name required`)
+      check(Number.isInteger(p.hue) && p.hue >= 0 && p.hue <= 360, `${rid}.${pid}: hue must be 0-360`)
+      check(Array.isArray(p.nav) && p.nav.length <= 3 && Array.isArray(p.actions) && Array.isArray(p.home), `${rid}.${pid}: nav (3 at most), actions and home required`)
+      if (!Array.isArray(p.nav) || !Array.isArray(p.actions) || !Array.isArray(p.home)) continue
+      for (const d of p.drift ?? []) {
+        check(r.personas[d.to] && d.to !== pid, `${rid}.${pid}: drift target ${d.to} is not a profile of ${rid}`)
+        check(DRIFT_SIGNALS.includes(d.signal) && Number.isInteger(d.min) && d.min > 0, `${rid}.${pid}: drift rule needs a known signal and a positive min`)
+      }
       for (const m of p.nav) check(r.modules.includes(m), `${rid}.${pid}: nav module ${m} not enabled in region`)
       for (const a of p.actions) check(ACTIONS[a], `${rid}.${pid}: unknown action ${a}`)
       for (const wd of p.home) {
@@ -281,17 +333,23 @@ export function validateCatalog(mods) {
       }
     }
   }
+  return errors
+}
+
+// Throws at boot if the catalog refers to anything that does not exist, so a typo is never a runtime 500.
+export function validateCatalog(mods, regions = REGIONS, fx = FX_E8_PER_EUR) {
+  const errors = catalogErrors(mods, regions, fx)
   if (errors.length) throw new Error(`Catalog invalid:\n- ${errors.join('\n- ')}`)
 }
 
 export function listRegions() {
   return Object.entries(REGIONS).filter(([id]) => regionOpen(id)).map(([id, r]) => ({
     id, name: r.name, currency: r.currency, dialCode: r.dialCode, custody: r.custody,
-    personas: Object.entries(r.personas).map(([pid, p]) => ({ id: pid, label: p.label, tagline: p.tagline, icon: p.icon, hue: p.hue, restricted: Boolean(p.restricted) })),
+    personas: Object.entries(r.personas).filter(([pid]) => !CLOSED.has(`${id}.${pid}`)).map(([pid, p]) => ({ id: pid, label: p.label, tagline: p.tagline, icon: p.icon, hue: p.hue, tier: p.tier ?? 1, restricted: Boolean(p.restricted) })),
   }))
 }
 
-export const personaExists = (regionId, personaId) => regionOpen(regionId) && Boolean(REGIONS[regionId].personas[personaId])
+export const personaExists = (regionId, personaId) => regionOpen(regionId) && Boolean(REGIONS[regionId].personas[personaId]) && !CLOSED.has(`${regionId}.${personaId}`)
 
 // What a user may see: modules hidden when their custody stage does not support them.
 export function moduleAvailable(region, modId) {

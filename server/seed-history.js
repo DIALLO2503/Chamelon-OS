@@ -49,7 +49,7 @@ async function hassan(c, me) {
   const r = rng(23)
   const clients = await customers(c, '+21260002', ['Famille Berrada', 'Villa Anfa', 'Café Bab Doukkala', 'Riad Zitoun', 'M. Kettani'])
   const supplier = await partyByPhone(c, '+212600029000', 'Matériaux Sidi Moumen')
-  const crew = await customers(c, '+21260004', ['Rachid Ouahbi', 'Mustapha Lahlou'])
+  const crew = await customers(c, '+21260004', ['Rachid Ouahbi', 'Mustapha Lahlou', 'Abdelkader Naji', 'Saïd Fikri', 'Hamza Rami'])
   for (let d = 170; d >= 1; d--) {
     const dow = isoDow(d)
     if (dow === 7) continue

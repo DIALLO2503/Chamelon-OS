@@ -84,3 +84,6 @@
 .pub-trust-head { display: flex; align-items: center; gap: 8px; color: var(--ok); }
 .pub-trust-badge { display: flex; gap: 8px; align-items: flex-start; }
 .pub-trust-badge > svg { color: var(--ok); margin-top: 2px; flex: none; }
+
+.adm-cat-region .row-title .muted { font-weight: 400; }
+.adm-json { width: 100%; font: 0.8em/1.45 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; padding: 10px 12px; border-radius: 12px; border: 1px solid var(--line); background: var(--sunk); color: var(--fg); resize: vertical; }

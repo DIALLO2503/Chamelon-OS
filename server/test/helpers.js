@@ -11,7 +11,7 @@ export const { REGIONS } = await import('../catalog.js')
 
 export const PIN = '2580'
 const PIN_HASH = hashPin(PIN)
-const DIAL = { MA: '+2126', SN: '+22177', FR: '+336', AE: '+97150', GN: '+22462', CI: '+225070', CM: '+2376' }
+const DIAL = { MA: '+2126', SN: '+22177', FR: '+336', AE: '+97150', GN: '+22462', CI: '+225070', CM: '+2376', TG: '+22890' }
 let n = 0
 export const phone = region => `${DIAL[region]}${String(1000000 + ++n).slice(-7)}`
 

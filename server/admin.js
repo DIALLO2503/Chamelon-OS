@@ -8,6 +8,7 @@ import { audit, partyById, walletOf, userById } from './context.js'
 import { post, sys, reconcile } from './ledger.js'
 import { notify } from './rails.js'
 import { loadEscrow, releaseEscrow, refundEscrow, escrowHooks } from './modules/escrow.js'
+import { catalogState, overlayErrors, proposeVersion, approveVersion, rejectVersion } from './catalog-runtime.js'
 
 export const adminRoutes = Router()
 const log = (c, req, action, objectType, objectId, data) => audit(c, { actorType: 'admin', actorId: req.userId, action, objectType, objectId, data, ip: req.ip })
@@ -195,6 +196,26 @@ adminRoutes.post('/adjustments/:id/approve', async (req, res) => {
     await c.query(`UPDATE adjustments SET status='approved', approved_by=$2 WHERE id=$1`, [a.id, req.userId])
     await log(c, req, 'adjustment.approve', 'adjustment', a.id, { amount: a.amount })
   })
+  res.json({ ok: true })
+})
+
+/* ---------------- runtime catalog: regions and profiles without a deploy ---------------- */
+
+adminRoutes.get('/catalog', async (req, res) => res.json(await catalogState()))
+adminRoutes.post('/catalog/validate', async (req, res) => res.json({ errors: await overlayErrors(req.body?.overlay ?? {}) }))
+adminRoutes.post('/catalog/propose', async (req, res) => {
+  const id = await proposeVersion({ overlay: req.body?.overlay ?? {}, note: req.body?.note, adminId: req.userId })
+  await log(pool, req, 'catalog.propose', 'catalog_version', String(id), { note: req.body?.note })
+  res.json({ id })
+})
+adminRoutes.post('/catalog/:id/approve', async (req, res) => {
+  await approveVersion(Number(req.params.id), req.userId)
+  await log(pool, req, 'catalog.approve', 'catalog_version', req.params.id, {})
+  res.json({ ok: true })
+})
+adminRoutes.post('/catalog/:id/reject', async (req, res) => {
+  await rejectVersion(Number(req.params.id), req.userId)
+  await log(pool, req, 'catalog.reject', 'catalog_version', req.params.id, {})
   res.json({ ok: true })
 })
 

@@ -16,9 +16,12 @@ import { notify } from './rails.js'
 import inbox from './modules/inbox.js'
 import pos from './modules/pos.js'
 import advance from './modules/advance.js'
+import { setModules } from './catalog-runtime.js'
+import { driftSuggestion } from './drift.js'
 
 export const MODS = { wallet, tontine, escrow, jobs, remit, family, orders, creditbook, invoices, shifts, budget, float, score, pos, advance, inbox }
 validateCatalog(MODS)
+setModules(MODS) // the runtime catalog validates new regions and profiles against the same registry
 
 const INTENT_TTL_MIN = 10
 const label = (ctx, text) => fill(text, ctx.region.vocab)
@@ -139,6 +142,9 @@ const MAX_INSIGHTS = 3
 // A money warning (cash gap, short runway) always keeps one of the slots.
 async function insights(ctx) {
   const found = []
+  // Profile drift first: the person's activity says they have outgrown their profile.
+  const drift = await driftSuggestion(ctx)
+  if (drift) found.push({ type: 'insight', icon: 'sparkles', text: `${drift.why} : votre activité ressemble à celle du profil « ${drift.label} ». Passer à ce profil ? Vos paiements et votre réputation sont conservés.`, cta: { label: 'Voir le profil', module: 'services' } })
   for (const id of enabledModules(ctx)) {
     const hit = await MODS[id]?.insight?.(ctx)
     if (hit) found.push({ type: 'insight', ...hit })

@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { api, imageUrl, download } from '../api.js'
 import Icon from '../ui/Icon.jsx'
 
-const TABS = [['overview', 'Vue d’ensemble'], ['pilot', 'Pilote'], ['users', 'Utilisateurs'], ['disputes', 'Litiges'], ['adjustments', 'Ajustements'], ['ops', 'Opérations']]
+const TABS = [['overview', 'Vue d’ensemble'], ['pilot', 'Pilote'], ['catalog', 'Catalogue'], ['users', 'Utilisateurs'], ['disputes', 'Litiges'], ['adjustments', 'Ajustements'], ['ops', 'Opérations']]
 const when = iso => new Intl.DateTimeFormat('fr-FR', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }).format(new Date(iso))
 
 function useLoad(path, deps = []) {
@@ -397,7 +397,102 @@ function Ops() {
   )
 }
 
-const VIEWS = { overview: Overview, pilot: Pilot, users: Users, disputes: Disputes, adjustments: Adjustments, ops: Ops }
+/* ---------------- catalog: the adaptive OS (regions and profiles at runtime) ---------------- */
+// Every change here is a new version of the overlay on top of the code catalog: validated, proposed by one admin,
+// approved by another, kept in the history so it can be taken back.
+const pretty = o => JSON.stringify(o ?? {}, null, 2)
+function Catalog() {
+  const { data, error, reload } = useLoad('/admin/catalog')
+  const [draft, setDraft] = useState('')
+  const [note, setNote] = useState('')
+  const [check, setCheck] = useState(null)
+  const [clone, setClone] = useState({ from: '', region: '', id: '', label: '', tagline: '' })
+  useEffect(() => { if (data) setDraft(pretty(data.active.overlay)) }, [data?.active.id])
+  if (!data) return <Err msg={error} />
+  const base = data.active.overlay ?? {}
+  const parsed = (() => { try { return JSON.parse(draft) } catch { return null } })()
+  const withClosed = (key, close) => ({ ...base, closed: close ? [...new Set([...(base.closed ?? []), key])] : (base.closed ?? []).filter(k => k !== key) })
+  const propose = (overlay, why) => api('/admin/catalog/propose', { body: { overlay, note: why } })
+  const models = data.regions.flatMap(r => r.personas.map(p => ({ key: `${r.id}.${p.id}`, def: p.definition })))
+  const cloneOverlay = () => {
+    const src = models.find(p => p.key === clone.from)
+    const def = { ...src.def, label: clone.label.trim(), tagline: clone.tagline.trim() || src.def.tagline, drift: [] }
+    const regions = { ...(base.regions ?? {}) }
+    regions[clone.region] = { ...(regions[clone.region] ?? {}), personas: { ...(regions[clone.region]?.personas ?? {}), [clone.id]: def } }
+    return { ...base, regions }
+  }
+  const cloneValid = clone.from && clone.region && /^[a-z][a-z0-9_]{1,30}$/.test(clone.id) && clone.label.trim().length > 1
+  const pending = data.versions.filter(v => v.status === 'proposed')
+  return (
+    <>
+      <section className="sec">
+        <h2>Régions et profils actifs</h2>
+        <p className="muted">Fermer une région ou un profil arrête les inscriptions ; les comptes existants continuent de fonctionner. Chaque changement crée une version à faire approuver par un autre administrateur.</p>
+        {data.regions.map(r => (
+          <div key={r.id} className="card adm-cat-region">
+            <div className="row"><div className="row-main">
+              <div className="grow"><div className="row-title">{r.name} · {r.id} <span className="muted">{r.currency} · {r.custody}{r.fromCode ? '' : ' · créée à chaud'}</span></div></div>
+              {r.closed ? <span className="pill bad">Fermée</span> : <span className="pill ok">Ouverte</span>}
+              <ActionButton label={r.closed ? 'Rouvrir' : 'Fermer'} confirm run={() => propose(withClosed(r.id, !r.closed), `${r.closed ? 'Réouverture' : 'Fermeture'} de ${r.name}`)} onDone={reload} />
+            </div></div>
+            {r.personas.map(p => (
+              <div key={p.id} className="row"><div className="row-main">
+                <span className="disc soft small"><Icon name={p.icon} size={16} /></span>
+                <div className="grow"><div>{p.label} {p.tier > 1 && <span className="pill">Tier {p.tier}</span>}</div><div className="muted">{r.id}.{p.id} · {p.users} compte{p.users > 1 ? 's' : ''}{p.fromCode ? '' : ' · créé à chaud'}</div></div>
+                {p.closed && <span className="pill bad">Fermé</span>}
+                <ActionButton label={p.closed ? 'Rouvrir' : 'Fermer'} confirm run={() => propose(withClosed(`${r.id}.${p.id}`, !p.closed), `${p.closed ? 'Réouverture' : 'Fermeture'} du profil ${r.id}.${p.id}`)} onDone={reload} />
+              </div></div>
+            ))}
+          </div>
+        ))}
+      </section>
+
+      <section className="sec">
+        <h2>Créer un profil à partir d’un profil existant</h2>
+        <div className="card adm-form">
+          <Field label="Profil modèle" id="cat-from"><select id="cat-from" value={clone.from} onChange={e => setClone(c => ({ ...c, from: e.target.value, region: c.region || e.target.value.split('.')[0] }))}><option value="">Choisir…</option>{models.map(p => <option key={p.key} value={p.key}>{p.key} · {p.def.label}</option>)}</select></Field>
+          <Field label="Région" id="cat-region"><select id="cat-region" value={clone.region} onChange={e => setClone(c => ({ ...c, region: e.target.value }))}><option value="">Choisir…</option>{data.regions.map(r => <option key={r.id} value={r.id}>{r.id} · {r.name}</option>)}</select></Field>
+          <Field label="Identifiant (minuscules, chiffres, _)" id="cat-id"><input id="cat-id" value={clone.id} onChange={e => setClone(c => ({ ...c, id: e.target.value.trim() }))} placeholder="ex. couturiere" /></Field>
+          <Field label="Nom affiché" id="cat-label"><input id="cat-label" value={clone.label} onChange={e => setClone(c => ({ ...c, label: e.target.value }))} placeholder="ex. Couturière" /></Field>
+          <Field label="Accroche (facultatif)" id="cat-tag"><input id="cat-tag" value={clone.tagline} onChange={e => setClone(c => ({ ...c, tagline: e.target.value }))} /></Field>
+          <ActionButton label="Proposer ce profil" tone="primary" disabled={!cloneValid} run={() => propose(cloneOverlay(), `Nouveau profil ${clone.region}.${clone.id} (${clone.label.trim()})`)} onDone={() => { setClone({ from: '', region: '', id: '', label: '', tagline: '' }); reload() }} />
+        </div>
+      </section>
+
+      <section className="sec">
+        <h2>Éditeur avancé (JSON de la version active)</h2>
+        <p className="muted">Régions nouvelles ou modifiées (<code>regions</code>), profils (<code>null</code> supprime un profil sans compte), fermetures (<code>closed</code>), taux de change des nouvelles devises (<code>fx</code>, unités par euro × 10⁸).</p>
+        <div className="card adm-form">
+          <textarea className="adm-json" spellCheck="false" value={draft} onChange={e => { setDraft(e.target.value); setCheck(null) }} rows={14} aria-label="Catalogue au format JSON" />
+          {!parsed && <p className="error">JSON invalide</p>}
+          <Field label="Motif de la version (obligatoire)" id="cat-note"><input id="cat-note" value={note} onChange={e => setNote(e.target.value)} /></Field>
+          <div className="adm-search-row">
+            <ActionButton label="Vérifier" disabled={!parsed} run={async () => setCheck((await api('/admin/catalog/validate', { body: { overlay: parsed } })).errors)} />
+            <ActionButton label="Proposer cette version" tone="primary" disabled={!parsed || !note.trim()} run={() => propose(parsed, note)} onDone={() => { setNote(''); reload() }} />
+          </div>
+          {check && (check.length ? <ul className="error">{check.map(e => <li key={e}>{e}</li>)}</ul> : <p className="adm-ok">Catalogue valide</p>)}
+        </div>
+      </section>
+
+      <section className="sec">
+        <h2>Versions {pending.length > 0 && <span className="pill wait">{pending.length} en attente</span>}</h2>
+        <div className="card">
+          {data.versions.length === 0 && <div className="row muted">Aucune version : le catalogue du code est actif.</div>}
+          {data.versions.map(v => (
+            <div key={v.id} className="row"><div className="row-main">
+              <div className="grow"><div className="row-title">#{v.id} · {v.note}</div><div className="muted">Proposée par {v.proposed_by_name ?? '—'} le {when(v.created_at)}{v.approved_by_name ? ` · ${v.status === 'rejected' ? 'rejetée' : 'approuvée'} par ${v.approved_by_name}` : ''}</div></div>
+              <span className={`pill ${v.status === 'active' ? 'ok' : v.status === 'proposed' ? 'wait' : v.status === 'rejected' ? 'bad' : ''}`}>{{ active: 'Active', proposed: 'En attente', superseded: 'Remplacée', rejected: 'Rejetée' }[v.status]}</span>
+              {v.status === 'proposed' && <><ActionButton label="Approuver" tone="primary" confirm run={() => api(`/admin/catalog/${v.id}/approve`, { body: {} })} onDone={reload} /><ActionButton label="Rejeter" run={() => api(`/admin/catalog/${v.id}/reject`, { body: {} })} onDone={reload} /></>}
+              {v.status === 'superseded' && <ActionButton label="Reprendre" confirm run={() => propose(v.overlay, `Retour à la version #${v.id}`)} onDone={reload} />}
+            </div></div>
+          ))}
+        </div>
+      </section>
+    </>
+  )
+}
+
+const VIEWS = { overview: Overview, pilot: Pilot, catalog: Catalog, users: Users, disputes: Disputes, adjustments: Adjustments, ops: Ops }
 
 export default function AdminConsole({ onClose }) {
   const [tab, setTab] = useState('overview')
