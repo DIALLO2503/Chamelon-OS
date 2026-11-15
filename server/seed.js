@@ -8,6 +8,7 @@ import { createUser, hashPin } from './auth.js'
 import * as engine from './engine.js'
 import { drainOutbox, simulateSettle } from './rails.js'
 import { jobOps } from './modules/jobs.js'
+import { seedHistory } from './seed-history.js'
 
 if (config.env !== 'sandbox') throw new Error('The demo seed only runs with NEXUS_ENV=sandbox')
 
@@ -137,6 +138,9 @@ export async function seedDemo() {
   await act('aminata', 'budget', 'set', { amount: '900' })
   for (const [category, amount, label] of [['Loyer', '450', 'Résidence universitaire'], ['Courses', '86.40', 'Supermarché']]) await act('aminata', 'budget', 'expense', { category, amount, label })
   await act('aissatou', 'float', 'cashIn', { amount: '75000', phone: u.diarra.phone })
+
+  // Six months of past sales and payments, so the home trend and money alerts have real data to show.
+  await seedHistory(u)
   return true
 }
 
