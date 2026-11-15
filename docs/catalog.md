@@ -37,12 +37,16 @@ Related: [custody-stages.md](custody-stages.md), [architecture.md](architecture.
 |---|---|
 | `label`, `tagline`, `icon`, `hue` | Shown at sign-up and in the header; `hue` tints the interface. |
 | `nav` | Up to three module ids in the bottom bar (between Accueil and Services). Must be enabled in the region. |
-| `actions` | Quick-action ids from `ACTIONS`. The first four that are allowed for this user are shown. |
+| `actions` | Quick-action ids from `ACTIONS`. The first allowed ones are shown: two at reputation level 1, one more per level, four at most (`actionCount` in `engine.js`). |
 | `home` | Ordered widgets: `{ type, title, module?, source?, caption? }` (below). |
 | `presentation` | `{ contrast: 'high' }` (outdoor profiles: `data-contrast` on the shell) and/or `{ textScale: 1.15 }` (font size). |
 | `restricted` | A role name (today only `'agent'`). Signing up with this persona creates the role in `pending`; actions with `role: 'agent'` stay hidden until an admin activates it. |
 | `deny` | Optional list of `'module.action'` to hide for this persona. Supported by `engine.js`, used by no persona today. |
 | `jobRole` | `'client'` makes `jobs.create` ask for the artisan and the site's country (the builder). Default: the user is the artisan. |
+
+### Progressive disclosure
+
+What the app shows grows with the reputation level (`LEVELS` in `modules/work.js`: Premières pièces 0, Motif 150, Rosace 400, Zellij complet 700 points). A module with `unlock: n` in `MODULES` (today `invoices` and `advance`, at level index 1, « Motif ») stays out of the bottom bar and Services until the person reaches it; Services lists it under « À débloquer » with the points left. The persona's first `nav` module (its wedge) is never locked. **This is visibility, never permission**: a locked module still opens from a link, an insight or a request someone sent, and money rules (KYC, custody, roles) are unchanged. Reaching a level sends one inbox message and shows one card on the home screen with what is new (`level-up:<user>:<level>` dedupe).
 
 Helpers in the file build personas from shared shapes: `shop()`, `seller()`, `parent`, `artisan()`, `worker`, `abroad()`.
 

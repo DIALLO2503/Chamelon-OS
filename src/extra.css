@@ -79,3 +79,8 @@
 .rights p { flex-basis: 100%; margin: 0 0 .25rem; }
 .rights a { color: inherit; text-decoration: underline; }
 .adm-search-row .field input { flex: none; }
+
+.pub-trust { padding: 14px; display: flex; flex-direction: column; gap: 8px; border-color: var(--ok); }
+.pub-trust-head { display: flex; align-items: center; gap: 8px; color: var(--ok); }
+.pub-trust-badge { display: flex; gap: 8px; align-items: flex-start; }
+.pub-trust-badge > svg { color: var(--ok); margin-top: 2px; flex: none; }

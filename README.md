@@ -39,7 +39,7 @@ npm run seed                     # migrates, then creates 31 demo accounts (PIN 
 npm run build                    # builds the PWA into dist/
 npm run server                   # http://localhost:3001 (serves dist/ and /api)
 
-# 3. Tests (65, end to end, against nexus_test; the schema is dropped and recreated)
+# 3. Tests (68, end to end, against nexus_test; the schema is dropped and recreated)
 npm test
 ```
 
@@ -127,7 +127,7 @@ All variables are read in `server/config.js` (plus `CUSTODY_<ID>` in `server/cat
 | [docs/partner-integration.md](docs/partner-integration.md) | Go-live checklist for a licensed partner |
 | [docs/pilot.md](docs/pilot.md) | Running the two-country pilot on one server, with phones as SMS gateways and no payment partner |
 | [docs/demo.md](docs/demo.md) | A public sandbox demo on Render in a few clicks (`render.yaml`), with the demo accounts |
-| [docs/testing.md](docs/testing.md) | What the 65 tests prove and how to add one |
+| [docs/testing.md](docs/testing.md) | What the 68 tests prove and how to add one |
 | [docs/glossary.md](docs/glossary.md) | Product and domain terms |
 
 ## Layout

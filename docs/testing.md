@@ -10,12 +10,13 @@ Related: [money.md](money.md), [partner-integration.md](partner-integration.md).
 - `server/test/fixes.test.js` (15 tests): regression tests for the issues fixed after the first documentation pass ([security.md](security.md#known-gaps-and-non-goals)).
 - `server/test/messaging.test.js` (5 tests): SMS login codes and WhatsApp/SMS notifications against a local HTTP stand-in for Twilio's Messages API (request shape, credentials, provider failure, SMS fallback, outbox retry).
 - `server/test/pilot.test.js` (6 tests): the link funnel, and the pilot configuration: sign-up limited to two countries, one SMS gateway phone per country, the first admin created from the command line, live boot without a payment partner.
+- `server/test/trust.test.js` (3 tests): badges earned only from commitments others confirmed (progress first, crew pay on three different weeks for "Patron fiable"), link pages showing badges only after the owner opts in and never the score, and progressive disclosure (a locked module is hidden but still opens from a link, the profile's first module is never locked, quick actions grow with the level, the level-up message is sent once).
 - `server/test/pos-advance.test.js` (4 tests): in-person collection in both custody stages (partner confirms or refuses; customer confirms or rejects the scanned payment), and advances (eligibility from money actually received, fee in the quote, one at a time, manual and due-date repayment, empty wallet collected later without penalty, no advances in record countries). `pilot.test.js` also checks that live refuses `ADVANCE_LENDER` without a partner.
 - `server/test/insights.test.js` (6 tests, no database): the home trend (six months, this month against the same days of last month) and the money alerts (cash gap, short runway, best weekday, silence when activity is too thin), against a fake database client.
 - `server/test/helpers.js` sets `NEXUS_ENV=test` before importing anything, so tests use `postgres://nexus:nexus@localhost:5432/nexus_test` unless `DATABASE_URL` is set. Each file starts with `resetDb()`: **`DROP SCHEMA public CASCADE`**, then migrations. Never run tests with `DATABASE_URL` pointing at real data.
 - In `test`, rate limits are effectively off, OTP caps are the live ones (5 sends, 10 failures a day), logs are silent, and the sandbox partner does not auto-settle: tests settle explicitly.
 
-Expected result: `# tests 65`, `# pass 65` (64 and one skipped if the interface has not been built: the link-preview test reads `dist/index.html`).
+Expected result: `# tests 68`, `# pass 68` (67 and one skipped if the interface has not been built: the link-preview test reads `dist/index.html`).
 
 ## Helpers
 

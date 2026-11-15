@@ -162,9 +162,10 @@ export default {
         const phones = [...new Set(input.phones.split(/[,;\n]/).map(x => x.trim()).filter(Boolean))]
         if (!phones.length || phones.length > 15) fail('Entre 1 et 15 ouvriers')
         let share
+        const batch = newId() // one payday: every worker's confirmation counts toward the "Patron fiable" badge
         for (const p of phones) {
           const worker = await ctx.findParty(p)
-          const r = await recordPayment(ctx, { payerParty: ctx.party, payeeParty: worker, amount: input.amount, currency: ctx.cur.code, purpose: input.purpose })
+          const r = await recordPayment(ctx, { payerParty: ctx.party, payeeParty: worker, amount: input.amount, currency: ctx.cur.code, purpose: input.purpose, ref: `crew:${batch}` })
           share ??= r.share
         }
         return { message: `${phones.length} paie${phones.length > 1 ? 's' : ''} de ${ctx.f(input.amount)} enregistrée${phones.length > 1 ? 's' : ''}. Chaque ouvrier doit confirmer.`, share: phones.length === 1 ? share : undefined }

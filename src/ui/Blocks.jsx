@@ -202,9 +202,38 @@ function ScoreCard({ block }) {
           <div className="scorecard-top"><b className="num">{block.value}</b><span className="muted">/ 1000 · Niveau {block.level} · {block.name}</span></div>
           <div className="bar"><i style={{ width: `${Math.round(block.pct * 100)}%` }} /></div>
           <div className="muted">{block.next}</div>
+          {block.badges?.length > 0 && <div className="badge-chips">{block.badges.map(b => <span key={b.label} className="badge-chip"><Icon name={b.icon} size={14} />{b.label}</span>)}</div>}
+          {block.unlock && <div className="muted unlock-line"><Icon name="lock" size={14} />{block.unlock}</div>}
         </div>
         <Icon name="chevron-right" size={18} />
       </button>
+    </Section>
+  )
+}
+
+// Trust badges: earned ones first, then the ones in progress with how far along they are.
+function Badges({ block }) {
+  const earned = block.items.filter(b => b.earned), next = block.items.filter(b => !b.earned)
+  return (
+    <Section title={block.title}>
+      <div className="card badges">
+        {earned.length === 0 && <div className="row muted">Aucun badge pour le moment. Chaque engagement confirmé vous en rapproche.</div>}
+        {earned.map(b => (
+          <div key={b.id} className="row row-main badge-earned">
+            <span className="disc small"><Icon name={b.icon} size={18} /></span>
+            <div className="grow"><div className="row-title">{b.label}</div><div className="muted">{b.text}</div></div>
+            <Icon name="award" size={18} />
+          </div>
+        ))}
+        {next.map(b => (
+          <div key={b.id} className="row">
+            <div className="row-main"><span className="disc soft small"><Icon name={b.icon} size={18} /></span>
+              <div className="grow"><div className="row-title">{b.label}</div><div className="muted">{b.text}</div><div className="bar"><i style={{ width: `${Math.round((b.have / b.need) * 100)}%` }} /></div></div>
+            </div>
+          </div>
+        ))}
+        <div className="row muted badges-note"><Icon name={block.shared ? 'eye' : 'eye-off'} size={16} /><span>{block.note}</span></div>
+      </div>
     </Section>
   )
 }
@@ -264,7 +293,7 @@ const Note = ({ block }) => (
   </Section>
 )
 
-const TYPES = { balance: Balance, actions: Actions, insight: Insight, notice: Insight, kpis: Kpis, rows: Rows, feed: Feed, bars: Bars, budget: Budget, score: Score, scorecard: ScoreCard, trend: Trend, note: Note, zellij: Zellij, goal: Goal }
+const TYPES = { balance: Balance, actions: Actions, insight: Insight, notice: Insight, kpis: Kpis, rows: Rows, feed: Feed, bars: Bars, budget: Budget, score: Score, scorecard: ScoreCard, badges: Badges, trend: Trend, note: Note, zellij: Zellij, goal: Goal }
 
 export default function Block({ block }) {
   const Component = TYPES[block.type]

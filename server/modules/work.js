@@ -8,6 +8,7 @@ import { notify } from '../rails.js'
 import { log } from '../log.js'
 import { amountField, phoneField, textField } from './shared.js'
 import tontine from './tontine.js'
+import { computeBadges } from '../trust.js'
 import escrow from './escrow.js'
 
 const dayOffset = n => new Date(Date.now() - n * 86400000).toISOString().slice(0, 10)
@@ -177,7 +178,8 @@ export async function settleCommissions() {
 }
 
 /* ---------------- reputation: derived from kept commitments with distinct people, visible to the user only ---------------- */
-const LEVELS = [[0, 'Premières pièces'], [150, 'Motif'], [400, 'Rosace'], [700, 'Zellij complet']]
+// Levels gate what the app shows (progressive disclosure, engine.js) and lower some prices. Names follow the zellij.
+export const LEVELS = [[0, 'Premières pièces'], [150, 'Motif'], [400, 'Rosace'], [700, 'Zellij complet']]
 const TILES = 36
 
 export async function computeScore(client, user, party) {
@@ -204,18 +206,20 @@ export async function computeScore(client, user, party) {
   const level = LEVELS.findLastIndex(([min]) => value >= min)
   // One tile per kept commitment; a person who confirms many payments still fills at most three tiles.
   const tiles = Math.min(TILES, contribs + kept + Math.min(confirmed, people * 3))
-  return { value, level, signals, penalty, tiles }
+  return { value, level, signals, penalty, tiles, people, contribs, late, kept, confirmed, lost }
 }
 export const levelOf = async ctx => (await computeScore(ctx.client, ctx.user, ctx.party)).level
 
 // Compact version for the home screen: the value, the level and how far the next one is. Opens the full view.
-export async function scoreCard(ctx, title) {
+export async function scoreCard(ctx, title, { unlock = null } = {}) {
   const s = await computeScore(ctx.client, ctx.user, ctx.party)
   const [floor, name] = LEVELS[s.level], next = LEVELS[s.level + 1]
+  const badges = (await computeBadges(ctx.client, ctx.user, ctx.party, s)).filter(b => b.earned).map(b => ({ icon: b.icon, label: b.label }))
   return {
     type: 'scorecard', title, value: s.value, name, level: s.level + 1,
     pct: next ? (s.value - floor) / (next[0] - floor) : 1,
     next: next ? `Encore ${next[0] - s.value} points pour « ${next[1]} »` : 'Niveau maximum atteint',
+    badges, unlock,
     cta: { label: 'Voir le détail', module: 'score' },
   }
 }
@@ -232,9 +236,26 @@ export const score = {
       { type: 'zellij', filled: s.tiles, total: TILES, level: s.level + 1, name: LEVELS[s.level][1],
         next: next ? `Encore ${next[0] - s.value} points pour « ${next[1]} »` : 'Votre zellij est complet', perks },
       { type: 'score', value: s.value, note: `Calculée à partir de vos engagements tenus avec des personnes différentes. Vous seul la voyez.${s.penalty ? ` Retards et litiges perdus : −${s.penalty}.` : ''}`, signals: s.signals.map(x => ({ label: x.label, pct: x.pct })) },
-      { type: 'note', title: 'Comment poser une pièce', text: 'Chaque engagement tenu pose une pièce : une paie ou un paiement confirmé par l’autre personne, une cotisation versée, une étape validée. Les allers-retours avec la même personne ne comptent pas plus de trois fois.' }], actions: [] }
+      { type: 'badges', title: 'Vos badges', items: await computeBadges(ctx.client, ctx.user, ctx.party, s),
+        shared: ctx.user.share_badges, note: ctx.user.share_badges
+          ? 'Vos badges obtenus sont visibles par les personnes qui ouvrent vos liens (acheteurs, clients, ouvriers). Votre score, lui, reste privé.'
+          : 'Vos badges sont privés. Vous pouvez les montrer aux personnes qui ouvrent vos liens : un acheteur voit alors que d’autres vous ont fait confiance.' },
+      { type: 'note', title: 'Comment poser une pièce', text: 'Chaque engagement tenu pose une pièce : une paie ou un paiement confirmé par l’autre personne, une cotisation versée, une étape validée. Les allers-retours avec la même personne ne comptent pas plus de trois fois.' }],
+      actions: ['shareBadges'] }
   },
-  actions: {},
+  actions: {
+    // Opt-in: earned badges (never the score) on the person's link pages.
+    shareBadges: {
+      label: 'Montrer mes badges', icon: 'award',
+      form: ctx => ({ title: ctx.user.share_badges ? 'Masquer mes badges' : 'Montrer mes badges',
+        info: ctx.user.share_badges ? 'Vos badges ne seront plus visibles sur vos liens.' : 'Les personnes qui ouvrent vos liens verront vos badges obtenus (pas votre score, ni vos montants). Vous pouvez les masquer à tout moment.', fields: [] }),
+      async run(ctx) {
+        const on = !ctx.user.share_badges
+        await ctx.client.query('UPDATE users SET share_badges=$2 WHERE id=$1', [ctx.user.id, on])
+        return { message: on ? 'Vos badges sont visibles sur vos liens.' : 'Vos badges sont masqués.' }
+      },
+    },
+  },
 }
 
 export { FX_E8_PER_EUR as _fx, convert as _convert, ctxFor as _ctxFor }

@@ -11,13 +11,14 @@ export const MODULES = {
   family:     { icon: 'heart-handshake', label: 'Proches' },
   orders:     { icon: 'package',         label: 'Commandes' },
   creditbook: { icon: 'notebook-pen',    label: 'Carnet' },
-  invoices:   { icon: 'receipt-text',    label: 'Factures' },
+  // unlock: reputation level index (0-3, see LEVELS in modules/work.js) from which the module is shown. Visibility only.
+  invoices:   { icon: 'receipt-text',    label: 'Factures', unlock: 1 },
   shifts:     { icon: 'trending-up',     label: 'Gains' },
   budget:     { icon: 'piggy-bank',      label: 'Budget' },
   float:      { icon: 'landmark',        label: 'Float', custody: 'held' },
   score:      { icon: 'gauge',           label: '{reputation}' },
   pos:        { icon: 'smartphone',      label: 'Encaisser' },
-  advance:    { icon: 'hand-coins',      label: 'Avance', custody: 'held' },
+  advance:    { icon: 'hand-coins',      label: 'Avance', custody: 'held', unlock: 1 },
   inbox:      { icon: 'bell',            label: 'Messages' },
   services:   { icon: 'layout-grid',     label: 'Services' },
 }

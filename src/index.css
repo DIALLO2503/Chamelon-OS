@@ -233,3 +233,12 @@ input:focus, select:focus { outline: none; border-color: var(--accent); }
 .shell[data-contrast='high'] .card { border-width: 2px; }
 .shell[data-contrast='high'] .acts .disc { width: 62px; height: 62px; }
 .shell[data-contrast='high'] .acts button { font-size: 0.9em; }
+
+/* Trust badges and progressive disclosure */
+.badge-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.badge-chip { display: inline-flex; align-items: center; gap: 4px; font-size: 0.75em; font-weight: 700; padding: 3px 8px; border-radius: 999px; background: var(--ok-soft); color: var(--ok); }
+.unlock-line { display: flex; align-items: center; gap: 6px; margin-top: 6px; font-size: 0.85em; }
+.badge-earned .disc { background: var(--ok-soft); color: var(--ok); }
+.badge-earned > svg { color: var(--ok); }
+.badges-note { display: flex; gap: 8px; align-items: flex-start; font-size: 0.85em; }
+.row.locked { width: 100%; text-align: left; color: inherit; }

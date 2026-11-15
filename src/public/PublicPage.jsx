@@ -145,6 +145,14 @@ export default function PublicPage({ token }) {
               ))}
             </dl>
 
+            {view.trust && (
+              <section className="card pub-trust" aria-label={`Badges de confiance de ${view.trust.name}`}>
+                <div className="pub-trust-head"><Icon name="award" size={20} /><strong>Badges de confiance de {view.trust.name}</strong></div>
+                {view.trust.badges.map(b => <div key={b.label} className="pub-trust-badge"><Icon name={b.icon} size={16} /><span><strong>{b.label}</strong> · {b.text}</span></div>)}
+                <p className="muted">Obtenus grâce à des engagements confirmés par d’autres personnes sur Nexus.</p>
+              </section>
+            )}
+
             {view.proof?.length > 0 && (
               <section className="sec">
                 <h2>Photos de l’étape</h2>

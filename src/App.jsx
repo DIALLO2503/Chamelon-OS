@@ -75,6 +75,21 @@ function Services({ openAdmin }) {
       <div className="tiles">
         {experience.services.map(m => <button key={m.id} className="tile" onClick={() => setTab(m.id)}><span className="disc soft"><Icon name={m.icon} /></span>{m.label}</button>)}
       </div>
+      {experience.locked?.length > 0 && (
+        <section className="sec">
+          <h2>À débloquer</h2>
+          <div className="card">
+            {experience.locked.map(m => (
+              <button key={m.id} className="row row-main locked" onClick={() => setTab('score')}>
+                <span className="disc soft small"><Icon name="lock" size={16} /></span>
+                <div className="grow"><div className="row-title">{m.label}</div><div className="muted">Niveau {m.level} « {m.name} » · encore {m.pointsLeft} points</div></div>
+                <Icon name="chevron-right" size={16} />
+              </button>
+            ))}
+          </div>
+          <p className="muted">Les services s’ouvrent au fur et à mesure que votre réputation grandit : chaque paiement confirmé, cotisation versée ou étape validée compte.</p>
+        </section>
+      )}
       {user.pendingRoles.length > 0 && <div className="insight notice"><Icon name="clock" size={22} /><div><p>Votre demande d’agrément est en cours de vérification par notre équipe.</p></div></div>}
       <div className="card account">
         <div><strong>{user.name}</strong><div className="muted">{user.phone} · {KYC[user.kycLevel]}</div></div>

@@ -128,6 +128,10 @@ Helmet defaults (CSP `default-src 'self'`, images also `data:` and `blob:`, HSTS
 
 Not handled: erasure (postings and entries are append-only by trigger and hold free-text titles), data export, retention schedules, consent records for counterparties, data residency (one database for all countries), encryption at rest beyond what the host provides.
 
+## Reputation and trust badges
+
+The score is visible to its owner only. Badges (`server/trust.js`) are earned from commitments other people confirmed, never from self-declared data. They are private by default; the owner may turn on `share_badges` (Réputation → Montrer mes badges), and the pages their counterparties open from a link then show their masked name and the labels of earned badges: no score, no amounts, no history. Turning it off hides them at once.
+
 ## Known gaps and non-goals
 
 Stated plainly.
