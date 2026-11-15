@@ -77,6 +77,8 @@ export async function startCollection(client, { amount, currency, phone, partyId
 
 // Business effects of a confirmed collection, registered by modules (e.g. an order becomes paid).
 export const collectionHandlers = {}
+// Business effects of a collection the payer refused or that failed (nothing was credited), by purpose.type.
+export const collectionFailedHandlers = {}
 // Business effects of a payout's outcome, by purpose.type. On failure the money is first returned to the account it left.
 export const payoutHandlers = { succeeded: {}, failed: {} }
 
@@ -114,6 +116,8 @@ export async function handleWebhook(rawBody, headers) {
       if (ok) await payoutHandlers.succeeded[op.purpose.type]?.(c, op)
     } else if (ok) {
       await collectionHandlers[op.purpose.type]?.(c, op)
+    } else {
+      await collectionFailedHandlers[op.purpose.type]?.(c, op)
     }
     return { ok: true }
   })

@@ -8,6 +8,7 @@ import { audit, partyById, walletOf, userById } from './context.js'
 import { post, sys, reconcile } from './ledger.js'
 import { notify } from './rails.js'
 import { loadEscrow, releaseEscrow, refundEscrow, escrowHooks } from './modules/escrow.js'
+import { catalogState, overlayErrors, proposeVersion, approveVersion, rejectVersion } from './catalog-runtime.js'
 
 export const adminRoutes = Router()
 const log = (c, req, action, objectType, objectId, data) => audit(c, { actorType: 'admin', actorId: req.userId, action, objectType, objectId, data, ip: req.ip })
@@ -18,7 +19,7 @@ const log = (c, req, action, objectType, objectId, data) => audit(c, { actorType
 export async function safeguarding(client = pool) {
   const rows = await all(client, `SELECT currency,
       COALESCE(SUM(balance) FILTER (WHERE owner <> 'system' OR kind IN ('escrow','payout_pending','returns','remit_transit','fx_out')),0)::bigint AS owed,
-      COALESCE(-SUM(balance) FILTER (WHERE owner='system' AND kind IN ('rail','fx','adjustments','commissions')),0)::bigint AS held_at_partner
+      COALESCE(-SUM(balance) FILTER (WHERE owner='system' AND kind IN ('rail','fx','adjustments','commissions','lender')),0)::bigint AS held_at_partner
     FROM accounts GROUP BY currency ORDER BY currency`)
   return rows.map(r => ({ ...r, ok: r.owed <= r.held_at_partner, owedText: money(r.owed, r.currency), heldText: money(r.held_at_partner, r.currency) }))
 }
@@ -73,6 +74,35 @@ adminRoutes.get('/users/:id', async (req, res) => {
   res.json({ user: safe, accounts: accounts.map(a => ({ ...a, text: money(a.balance, a.currency) })), roles, events })
 })
 
+// Right to erasure: after a closure request and with every account at zero, the person's name, phone and free text
+// are scrubbed everywhere they appear. Amounts and ledger lines stay (accounting and anti-money-laundering records);
+// they no longer say who it was. Irreversible.
+export async function eraseUser(c, userId) {
+  const u = await one(c, 'SELECT * FROM users WHERE id=$1 FOR UPDATE', [userId])
+  if (!u) fail('Utilisateur introuvable', 404)
+  if (u.erased_at) fail('Compte déjà effacé', 409)
+  if (!u.closure_requested_at) fail('La personne doit d’abord demander la fermeture de son compte', 409)
+  const open = await one(c, 'SELECT COALESCE(SUM(abs(balance)),0)::bigint AS n FROM accounts WHERE owner=$1', [userId])
+  if (open.n !== 0) fail('Le solde doit être à zéro avant l’effacement', 409)
+  const party = await one(c, 'SELECT * FROM parties WHERE user_id=$1', [userId])
+  await c.query(`UPDATE posting_details SET title=NULL, erased_at=now() WHERE posting_id IN (SELECT p.id FROM postings p JOIN accounts a ON a.id=p.account_id WHERE a.owner=$1)`, [userId])
+  if (party) {
+    await c.query('UPDATE posting_details SET cp_party=NULL, erased_at=now() WHERE cp_party=$1', [party.id])
+    await c.query(`UPDATE recorded_payments SET purpose='Paiement' WHERE payer_party=$1 OR payee_party=$1`, [party.id])
+    await c.query('DELETE FROM notifications WHERE party_id=$1', [party.id])
+    await c.query('UPDATE links SET revoked_at=now() WHERE party_id=$1 AND revoked_at IS NULL', [party.id])
+    await c.query(`UPDATE parties SET name='Compte effacé', phone='erased:' || id WHERE id=$1`, [party.id])
+  }
+  await c.query('DELETE FROM notifications WHERE user_id=$1', [userId])
+  await c.query('UPDATE sessions SET revoked_at=now() WHERE user_id=$1 AND revoked_at IS NULL', [userId])
+  await c.query(`UPDATE users SET name='Compte effacé', phone='erased:' || id, pin_hash=NULL, frozen=true, erased_at=now() WHERE id=$1`, [userId])
+}
+adminRoutes.post('/users/:id/erase', async (req, res) => {
+  const reason = String(req.body?.reason ?? '').trim()
+  if (!reason) fail('Motif requis')
+  await tx(async c => { await eraseUser(c, req.params.id); await log(c, req, 'user.erase', 'user', req.params.id, { reason }) })
+  res.json({ ok: true })
+})
 adminRoutes.post('/users/:id/freeze', async (req, res) => {
   const frozen = Boolean(req.body?.frozen), reason = String(req.body?.reason ?? '').trim()
   if (!reason) fail('Motif requis')
@@ -198,6 +228,26 @@ adminRoutes.post('/adjustments/:id/approve', async (req, res) => {
   res.json({ ok: true })
 })
 
+/* ---------------- runtime catalog: regions and profiles without a deploy ---------------- */
+
+adminRoutes.get('/catalog', async (req, res) => res.json(await catalogState()))
+adminRoutes.post('/catalog/validate', async (req, res) => res.json({ errors: await overlayErrors(req.body?.overlay ?? {}) }))
+adminRoutes.post('/catalog/propose', async (req, res) => {
+  const id = await proposeVersion({ overlay: req.body?.overlay ?? {}, note: req.body?.note, adminId: req.userId })
+  await log(pool, req, 'catalog.propose', 'catalog_version', String(id), { note: req.body?.note })
+  res.json({ id })
+})
+adminRoutes.post('/catalog/:id/approve', async (req, res) => {
+  await approveVersion(Number(req.params.id), req.userId)
+  await log(pool, req, 'catalog.approve', 'catalog_version', req.params.id, {})
+  res.json({ ok: true })
+})
+adminRoutes.post('/catalog/:id/reject', async (req, res) => {
+  await rejectVersion(Number(req.params.id), req.userId)
+  await log(pool, req, 'catalog.reject', 'catalog_version', req.params.id, {})
+  res.json({ ok: true })
+})
+
 /* ---------------- operations ---------------- */
 
 adminRoutes.get('/outbox', async (req, res) => {
@@ -236,8 +286,8 @@ const EXPORTS = {
     FROM users u WHERE u.created_at >= $1 AND u.created_at < $2 ORDER BY u.created_at`,
   recorded_payments: `SELECT r.id, r.created_at, r.confirmed_at, r.status, r.amount, r.currency, r.purpose, r.ref, pa.phone AS payer_phone, pa.name AS payer_name, pb.phone AS payee_phone, pb.name AS payee_name
     FROM recorded_payments r JOIN parties pa ON pa.id=r.payer_party JOIN parties pb ON pb.id=r.payee_party WHERE r.created_at >= $1 AND r.created_at < $2 ORDER BY r.created_at`,
-  ledger: `SELECT p.id AS posting_id, p.created_at, e.id AS entry_id, e.kind AS entry_kind, a.owner AS account_owner, a.kind AS account_kind, a.currency, p.amount, p.title, p.ref
-    FROM postings p JOIN entries e ON e.id=p.entry_id JOIN accounts a ON a.id=p.account_id WHERE p.created_at >= $1 AND p.created_at < $2 ORDER BY p.id`,
+  ledger: `SELECT p.id AS posting_id, p.created_at, e.id AS entry_id, e.kind AS entry_kind, a.owner AS account_owner, a.kind AS account_kind, a.currency, p.amount, d.title, p.ref
+    FROM postings p JOIN entries e ON e.id=p.entry_id JOIN accounts a ON a.id=p.account_id LEFT JOIN posting_details d ON d.posting_id=p.id WHERE p.created_at >= $1 AND p.created_at < $2 ORDER BY p.id`,
   disputes: `SELECT d.id, d.created_at, d.resolved_at, d.status, d.reason, e.title, e.amount, e.currency, d.resolution
     FROM disputes d JOIN escrows e ON e.id=d.escrow_id WHERE d.created_at >= $1 AND d.created_at < $2 ORDER BY d.created_at`,
   audit: `SELECT id, created_at, actor_type, actor_id, action, object_type, object_id, ip FROM audit_events WHERE created_at >= $1 AND created_at < $2 ORDER BY id`,

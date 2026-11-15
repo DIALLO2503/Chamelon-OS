@@ -25,7 +25,7 @@ Related: [custody-stages.md](custody-stages.md), [architecture.md](architecture.
 | `custody` | `'record'` | [custody-stages.md](custody-stages.md) |
 | `vocab` | `{ tontine: 'Daret', escrow: 'Aman', reputation: 'Niya' }` | Fills `{tontine}`, `{escrow}`, `{reputation}` in labels and widget titles |
 | `modules` | `['wallet', 'tontine', …]` | Modules enabled in the country (union with the persona's `nav`, minus custody-hidden ones) |
-| `corridors` | `[]` (FR: `['SN', 'MA', 'GN']`, AE: `['MA', 'SN']`) | Countries this country may send to (remit, cross-border escrow and jobs) |
+| `corridors` | `[]` (FR: `['SN', 'MA', 'GN', 'CI', 'CM']`, AE: `['MA', 'SN']`) | Countries this country may send to (remit, cross-border escrow and jobs) |
 | `billers` | `['Lydec', 'Redal', 'ONEE']` | Options of `wallet.bill`; empty list blocks the form |
 | `cashAgents` | `true` (SN only) | Enables `wallet.cashCode` |
 | `limits` | `{ 0: L(...), 1: L(...), 2: L(...) }` | KYC limits in minor units: `single`, `daily`, `monthly`, `balance` ([money.md](money.md#limits-per-kyc-level)) |
@@ -37,12 +37,16 @@ Related: [custody-stages.md](custody-stages.md), [architecture.md](architecture.
 |---|---|
 | `label`, `tagline`, `icon`, `hue` | Shown at sign-up and in the header; `hue` tints the interface. |
 | `nav` | Up to three module ids in the bottom bar (between Accueil and Services). Must be enabled in the region. |
-| `actions` | Quick-action ids from `ACTIONS`. The first four that are allowed for this user are shown. |
+| `actions` | Quick-action ids from `ACTIONS`. The first allowed ones are shown: two at reputation level 1, one more per level, four at most (`actionCount` in `engine.js`). |
 | `home` | Ordered widgets: `{ type, title, module?, source?, caption? }` (below). |
 | `presentation` | `{ contrast: 'high' }` (outdoor profiles: `data-contrast` on the shell) and/or `{ textScale: 1.15 }` (font size). |
 | `restricted` | A role name (today only `'agent'`). Signing up with this persona creates the role in `pending`; actions with `role: 'agent'` stay hidden until an admin activates it. |
 | `deny` | Optional list of `'module.action'` to hide for this persona. Supported by `engine.js`, used by no persona today. |
 | `jobRole` | `'client'` makes `jobs.create` ask for the artisan and the site's country (the builder). Default: the user is the artisan. |
+
+### Progressive disclosure
+
+What the app shows grows with the reputation level (`LEVELS` in `modules/work.js`: Premières pièces 0, Motif 150, Rosace 400, Zellij complet 700 points). A module with `unlock: n` in `MODULES` (today `invoices` and `advance`, at level index 1, « Motif ») stays out of the bottom bar and Services until the person reaches it; Services lists it under « À débloquer » with the points left. The persona's first `nav` module (its wedge) is never locked. **This is visibility, never permission**: a locked module still opens from a link, an insight or a request someone sent, and money rules (KYC, custody, roles) are unchanged. Reaching a level sends one inbox message and shows one card on the home screen with what is new (`level-up:<user>:<level>` dedupe).
 
 Helpers in the file build personas from shared shapes: `shop()`, `seller()`, `parent`, `artisan()`, `worker`, `abroad()`.
 
@@ -52,7 +56,9 @@ Helpers in the file build personas from shared shapes: `shop()`, `seller()`, `pa
 |---|---|---|
 | `balance` | built in (`balanceBlock`) | `caption` optional. Wallet balance in held, "received this month, confirmed" in record. |
 | `actions` | built in | The persona's quick actions. |
-| `insight` | built in | First non-empty `insight()` among enabled modules (a pending confirmation, an invitation, a stage to validate). |
+| `insight` | built in | Up to three cards: every non-empty `insight()` among enabled modules (a pending confirmation, an invitation, a stage to validate), then the money alerts of `server/insights.js` (cash gap or short runway, best weekday for money received). |
+| `trend` | built in | Six months of money received (`server/insights.js`), this month against the same days of last month, plus money out and net. Hidden until something is received. |
+| `reputation` | built in | Compact score card (value, level, progress to the next level) that opens the `score` module. Shown only where `score` is enabled. |
 | `feed` | built in | Last 8 postings (held) or recorded payments (record). |
 | `rows`, `kpis`, `bars`, `budget`, `goal` | `MODS[module].widgets[type]` | Must exist on the module; `source` selects a variant (`family`: `senders` / `beneficiaries`; `remit`: `quote`). Empty `rows` widgets are dropped. |
 
@@ -76,6 +82,8 @@ Widgets per module: `wallet.goal`; `tontine.rows`; `escrow.rows`; `jobs.rows`; `
 | `shifts` | trip R, expense R |
 | `budget` | set R, expense R |
 | `float` (held) | cashIn P held role agent, cashOut P held role agent |
+| `pos` | charge R held (payment request to the customer's mobile money), chargeRecorded R record (customer confirms by scanning) |
+| `advance` (held) | draw P held, repay P held; closed in live until `ADVANCE_LENDER` is set |
 | `score` | none (view only) |
 | `inbox` | readAll R |
 
@@ -127,11 +135,36 @@ No other file changes.
 
 **Code still needed for a real launch:** languages (Pular, Maninka, Susu are oral-first: voice), phone numbering-plan and operator detection (`normalizePhone` is generic), a better amount input for 7–8 digit sums.
 
+## The adaptive OS: changing the catalog at runtime
+
+The catalog in `server/catalog.js` is the base. On top of it, `server/catalog-runtime.js` applies one active **version**: an overlay stored in `catalog_versions`, changed from the admin console (**Catalogue** tab) without a deploy.
+
+| Overlay key | Effect |
+|---|---|
+| `regions.<ID>` | A new region (complete definition), or fields that replace those of an existing one |
+| `regions.<ID>.personas.<id>` | A new or replaced profile; `null` deletes a profile that no account uses |
+| `closed` | `["MA", "MA.parent"]`: closed to sign-up and to profile switches; existing accounts keep working |
+| `fx` | Rates for new currencies (units per EUR × 10⁸, as a string of digits) |
+| `pricing` | Replaces keys of `PRICING`: `escrowFeeBps` (0-500), `remitFeeByLevel` (4 shares 0-1), `remitFee`, `agentCommissionBps`, `advance` |
+
+Rules:
+- **Validated like the code catalog** (`catalogErrors`), plus: ids (regions two capital letters, profiles lowercase), labels, icons, hues, drift rules pointing to a profile of the same region, live guards (an open held region needs a payment partner; with phone gateways, every open region needs one).
+- **Never breaks an account:** a region or profile with accounts can be closed, not deleted; a rollback that would remove one is refused.
+- **Two people:** one admin proposes, another approves (`POST /api/admin/catalog/propose`, `/:id/approve`, `/:id/reject`); both steps are audited.
+- **Rollback:** every superseded version stays; "Reprendre" proposes it again.
+- **Applied in place** to `REGIONS`, `CURRENCIES`, `FX_E8_PER_EUR`, `PRICING`, so every module sees it at once; other server processes reload within `CATALOG_SYNC_MS` (30 s).
+
+### Profile drift
+
+A profile may declare `drift: [{ to, signal, min }]`. Signals (`server/drift.js`) count confirmed facts only: `crew_people` (distinct workers whose pay was confirmed, 90 days), `jobs_active` (jobs with an unpaid stage), `orders_paid_30d`, `payments_in_30d`. When a rule is met, the home screen and **Services › Votre profil** suggest the target profile. Switching (`POST /api/me/persona`) needs an explicit tap, keeps every record, balance and reputation point, is audited (`persona_changes`, reason `drift` or `choice`), and can happen once every 30 days. Restricted and closed profiles cannot be chosen.
+
+Tier 2 profiles in the code catalog: **Entreprise du bâtiment** (MA, GN, CI, CM; drift from the artisan at 5 workers or 3 active jobs) and **Boutique en ligne pro** (MA, SN, CI, CM; drift from the seller at 20 paid orders in 30 days).
+
 ## Still hard-coded
 
 | What | Where |
 |---|---|
-| French strings (labels, messages, errors, notifications) | Everywhere in `server/` and `src/`; no i18n layer |
+| Most French strings (messages, errors, notifications, profile names) | `server/` and `src/`. Translated so far (fr, ar, en, Arabic right to left): module names and quick actions (`server/i18n.js`, by `users.locale`), sign-in, navigation and common buttons (`src/i18n.js`) |
 | `fr-FR` number and date formatting | `fmt`, `formatRate`, `ago`, `longDate` in `server/core.js`; `toLocaleDateString('fr-FR')` in `escrow.js`, `public.js`; weekdays in `work.js` |
 | Block types and their rendering | `src/ui/Blocks.jsx`; built-in home widgets in `engine.js` `home()` |
 | Module registry | `MODS` in `server/engine.js` |
@@ -139,6 +172,6 @@ No other file changes.
 | Budget categories | `CATEGORIES` in `modules/work.js` |
 | Reputation levels, names (zellij), weights, 36 tiles | `LEVELS`, `TILES`, `computeScore` in `modules/work.js` |
 | Timers and caps | intent TTL 10 min (`engine.js`), cash code 15 min (`wallet.js`), 40 lookups/day (`context.js`), OTP and PIN rules (`auth.js`), tontine periods 7/30 days (`tontine.js`), 2–30 tontine members, 1–15 crew members, 4 job stages |
-| One FX table and pricing for all partners | `FX_E8_PER_EUR`, `PRICING` |
+| One FX table and pricing for all partners (changeable at runtime, not per partner) | `FX_E8_PER_EUR`, `PRICING`, runtime overlay `fx` and `pricing` |
 | Sandbox branches | `wallet.js` (`topup` text, `bill`, `verify`), `invoices.pay` info text |
 | Test dial codes | `DIAL` in `server/test/helpers.js` |

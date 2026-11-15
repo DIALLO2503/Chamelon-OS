@@ -1,7 +1,39 @@
 import { useEffect, useState } from 'react'
+import { t, LANGS, currentLang, setLang } from './i18n.js'
 import { api, session } from './api.js'
 import Icon from './ui/Icon.jsx'
 import PinPad from './ui/PinPad.jsx'
+
+// Language before anything else: the sign-in screen is the first thing a person reads.
+function LangPicker() {
+  const [, redraw] = useState(0)
+  return <select className="lang-pick" aria-label="Langue" value={currentLang()} onChange={e => { setLang(e.target.value); redraw(x => x + 1) }}>{LANGS.map(([id, name]) => <option key={id} value={id}>{name}</option>)}</select>
+}
+
+const groupBy = accounts => [...accounts.reduce((m, a) => m.set(a.group, [...(m.get(a.group) ?? []), a]), new Map())]
+
+// Sandbox only: puts every demo account, balance and history back as it was, after testing. Asks once before doing it.
+function ResetDemo({ onDone }) {
+  const [state, setState] = useState({ confirm: false, busy: false, note: '', error: '' })
+  const reset = async () => {
+    setState({ confirm: false, busy: true, note: '', error: '' })
+    try {
+      const r = await api('/sandbox/reset', { body: {} })
+      setState({ confirm: false, busy: false, note: `Démo réinitialisée : ${r.accounts} comptes remis à zéro.`, error: '' })
+      onDone()
+    } catch (e) { setState({ confirm: false, busy: false, note: '', error: e.message }) }
+  }
+  return (
+    <div className="card account">
+      <div className="grow"><strong>Recommencer la démo</strong><div className="muted">Remet tous les comptes de démonstration dans leur état de départ (soldes, historique, demandes). Vos essais sont effacés.</div></div>
+      {state.confirm
+        ? <><button type="button" className="chip-btn primary" onClick={reset}>Oui, tout remettre à zéro</button><button type="button" className="chip-btn" onClick={() => setState(s => ({ ...s, confirm: false }))}>Annuler</button></>
+        : <button type="button" className="chip-btn" disabled={state.busy} onClick={() => setState({ confirm: true, busy: false, note: '', error: '' })}><Icon name={state.busy ? 'loader-circle' : 'rotate-ccw'} size={16} />{state.busy ? 'Réinitialisation…' : 'Réinitialiser'}</button>}
+      {state.note && <p className="info" role="status">{state.note}</p>}
+      {state.error && <p className="error" role="alert">{state.error}</p>}
+    </div>
+  )
+}
 
 // New phone: code → country → profile → name → secret code (twice). Known phone: code → secret code.
 export default function Auth({ onDone }) {
@@ -62,30 +94,36 @@ export default function Auth({ onDone }) {
   return (
     <div className="shell auth" style={{ '--hue': persona?.hue }}>
       <div className="screen">
-        <div className="brand">Nexus</div>
+        <div className="brand-row"><div className="brand">Nexus</div><LangPicker /></div>
 
         {step === 'phone' && (
           <form onSubmit={e => { e.preventDefault(); requestCode(dial + number.replace(/\s/g, '').replace(/^0/, '')) }}>
-            <h1 className="screen-title">Votre numéro de téléphone</h1>
+            <h1 className="screen-title">{t('Votre numéro de téléphone')}</h1>
             <div className="field">
-              <label htmlFor="auth-number">Nous vous envoyons un code pour vérifier que c’est bien vous.</label>
+              <label htmlFor="auth-number">{t('Nous vous envoyons un code pour vérifier que c’est bien vous.')}</label>
               <div className="phone-row">
                 <select aria-label="Indicatif du pays" value={dial} onChange={e => setDial(e.target.value)}>{regions.map(r => <option key={r.id} value={r.dialCode}>{r.dialCode} {r.name}</option>)}</select>
                 <input id="auth-number" type="tel" inputMode="tel" autoComplete="tel-national" value={number} onChange={e => setNumber(e.target.value)} />
               </div>
             </div>
-            <button className="cta" disabled={busy || number.replace(/\D/g, '').length < 6}>Recevoir le code</button>
+            <button className="cta" disabled={busy || number.replace(/\D/g, '').length < 6}>{t('Recevoir le code')}</button>
             {sandbox.accounts.length > 0 && (
               <section className="sec">
-                <h2>Comptes de démonstration</h2>
-                <p className="muted">Bac à sable : argent fictif, partenaire simulé. Code secret de tous les comptes : <strong>{sandbox.pin}</strong>.</p>
-                <div className="card">
-                  {sandbox.accounts.map(a => (
-                    <button type="button" key={a.phone} className="row row-main" disabled={busy} onClick={() => requestCode(a.phone)}>
-                      <div className="grow"><div className="row-title">{a.name}</div><div className="muted">{a.label}</div></div><Icon name="chevron-right" size={16} />
-                    </button>
-                  ))}
-                </div>
+                <h2>{t('Comptes de démonstration')}</h2>
+                <p className="muted">Bac à sable : argent fictif, partenaire simulé. Un compte par profil et par pays. Code secret de tous les comptes : <strong>{sandbox.pin}</strong>.</p>
+                {groupBy(sandbox.accounts).map(([group, accounts]) => (
+                  <div key={group} className="demo-group">
+                    <div className="muted day-label">{group}</div>
+                    <div className="card">
+                      {accounts.map(a => (
+                        <button type="button" key={a.phone} className="row row-main" disabled={busy} onClick={() => requestCode(a.phone)}>
+                          <div className="grow"><div className="row-title">{a.name}</div><div className="muted">{a.label}</div></div><Icon name="chevron-right" size={16} />
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+                {sandbox.reset && <ResetDemo onDone={() => api('/config/sandbox').then(setSandbox).catch(() => {})} />}
               </section>
             )}
           </form>
@@ -93,22 +131,22 @@ export default function Auth({ onDone }) {
 
         {step === 'code' && (
           <form onSubmit={e => { e.preventDefault(); verify() }}>
-            <h1 className="screen-title">Entrez le code</h1>
+            <h1 className="screen-title">{t('Entrez le code')}</h1>
             <div className="field">
               <label htmlFor="auth-code">Code à 6 chiffres envoyé au {phone}</label>
               <input id="auth-code" className="otp" inputMode="numeric" autoComplete="one-time-code" maxLength={6} value={code} onChange={e => setCode(e.target.value.replace(/\D/g, ''))} />
             </div>
             {sandboxCode && <p className="info">Bac à sable : aucun SMS n’est envoyé. Votre code est <button type="button" className="link" onClick={() => setCode(sandboxCode)}>{sandboxCode}</button>.</p>}
-            <button className="cta" disabled={busy || code.length < 6}>Valider</button>
-            <button type="button" className="cta quiet" onClick={() => { setStep('phone'); setError('') }}>Changer de numéro</button>
+            <button className="cta" disabled={busy || code.length < 6}>{t('Valider')}</button>
+            <button type="button" className="cta quiet" onClick={() => { setStep('phone'); setError('') }}>{t('Changer de numéro')}</button>
           </form>
         )}
 
         {step === 'pin' && (
           <>
             <h1 className="screen-title">Bonjour {returning.split(' ')[0]}</h1>
-            <PinPad label="Votre code secret" busy={busy} error={error} onSubmit={login} />
-            <button type="button" className="cta quiet" disabled={busy} onClick={() => { setFirstPin(''); setError(''); setStep('reset1') }}>Code secret oublié ?</button>
+            <PinPad label={t('Votre code secret')} busy={busy} error={error} onSubmit={login} />
+            <button type="button" className="cta quiet" disabled={busy} onClick={() => { setFirstPin(''); setError(''); setStep('reset1') }}>{t('Code secret oublié ?')}</button>
           </>
         )}
         {step === 'reset1' && (

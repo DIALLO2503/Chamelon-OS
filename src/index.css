@@ -101,6 +101,7 @@ button:disabled { cursor: not-allowed; }
 .bar.over i { background: var(--bad); }
 .day { display: flex; flex-direction: column; gap: 6px; }
 .day-label { padding-left: 2px; }
+.demo-group { display: flex; flex-direction: column; gap: 6px; }
 .kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(96px, 1fr)); gap: 8px; }
 .kpi { padding: 12px; border-radius: 16px; background: var(--card); border: 1px solid var(--line); min-width: 0; }
 .kpi b { display: block; font: 800 1.05em 'Bricolage Grotesque Variable', system-ui, sans-serif; overflow-wrap: anywhere; }
@@ -109,6 +110,17 @@ button:disabled { cursor: not-allowed; }
 .chart rect.on { fill: var(--accent); } .chart rect.off { fill: var(--line); }
 .chart text { fill: var(--muted); font-size: 11px; }
 .chart-total { display: flex; justify-content: space-between; margin-top: 8px; font-weight: 600; }
+.chart rect.past { fill: var(--accent); opacity: 0.35; }
+.chart text.now { fill: var(--fg); font-weight: 700; }
+.trend { display: flex; flex-direction: column; gap: 12px; }
+.trend-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+.trend-amount { display: block; font: 800 1.6em/1.15 'Bricolage Grotesque Variable', system-ui, sans-serif; }
+.trend-kpis { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; padding-top: 10px; border-top: 1px solid var(--line); }
+.trend-kpis b { display: block; font-weight: 700; overflow-wrap: anywhere; }
+.scorecard { display: flex; align-items: center; gap: 12px; padding: 14px; width: 100%; text-align: left; color: inherit; }
+.scorecard > svg { color: var(--muted); }
+.scorecard-top { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+.scorecard-top b { font: 800 1.5em 'Bricolage Grotesque Variable', system-ui, sans-serif; }
 .score { display: flex; align-items: center; gap: 18px; padding: 16px; }
 .score b { font: 800 2.4em 'Bricolage Grotesque Variable', system-ui, sans-serif; }
 .note { display: flex; align-items: center; gap: 12px; padding: 14px; }
@@ -221,3 +233,20 @@ input:focus, select:focus { outline: none; border-color: var(--accent); }
 .shell[data-contrast='high'] .card { border-width: 2px; }
 .shell[data-contrast='high'] .acts .disc { width: 62px; height: 62px; }
 .shell[data-contrast='high'] .acts button { font-size: 0.9em; }
+
+/* Trust badges and progressive disclosure */
+.badge-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.badge-chip { display: inline-flex; align-items: center; gap: 4px; font-size: 0.75em; font-weight: 700; padding: 3px 8px; border-radius: 999px; background: var(--ok-soft); color: var(--ok); }
+.unlock-line { display: flex; align-items: center; gap: 6px; margin-top: 6px; font-size: 0.85em; }
+.badge-earned .disc { background: var(--ok-soft); color: var(--ok); }
+.badge-earned > svg { color: var(--ok); }
+.badges-note { display: flex; gap: 8px; align-items: flex-start; font-size: 0.85em; }
+.row.locked { width: 100%; text-align: left; color: inherit; }
+
+/* Language picker on the sign-in screen; right-to-left layout for Arabic (html[dir=rtl] set by src/i18n.js). */
+.brand-row { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
+.lang-pick { width: auto; flex: none; min-height: 36px; padding: 0 10px; border-radius: 999px; border: 1px solid var(--line); background: var(--card); color: var(--fg); font: inherit; font-size: 0.875em; }
+[dir='rtl'] .row-main, [dir='rtl'] .head, [dir='rtl'] .chip-row, [dir='rtl'] .bal-row, [dir='rtl'] .scorecard, [dir='rtl'] .brand-row { direction: rtl; }
+[dir='rtl'] .row-end, [dir='rtl'] .row-value { text-align: left; }
+[dir='rtl'] .num { direction: ltr; unicode-bidi: isolate; }
+[dir='rtl'] svg[aria-hidden='true'].lucide-chevron-right { transform: scaleX(-1); }

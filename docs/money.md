@@ -62,6 +62,7 @@ Values in major units:
 | MA (MAD) | 0 / 1 / 2 | 2 000 / 10 000 / 50 000 | 5 000 / 20 000 / 100 000 | 20 000 / 100 000 / 500 000 | 5 000 / 20 000 / 200 000 |
 | SN (XOF) | 0 / 1 / 2 | 200 000 / 1 000 000 / 5 000 000 | 500 000 / 2 000 000 / 10 000 000 | 2 000 000 / 15 000 000 / 50 000 000 | 2 000 000 / 4 000 000 / 20 000 000 |
 | GN (GNF) | 0 / 1 / 2 | 5 M / 20 M / 100 M | 10 M / 40 M / 200 M | 40 M / 200 M / 1 000 M | 10 M / 50 M / 300 M |
+| CI (XOF), CM (XAF) | 0 / 1 / 2 | Same values as SN, in their own currency (placeholders until a partner's tier rules are signed) | | | |
 | FR (EUR) | 0 / 1 / 2 | 150 / 5 000 / 50 000 | 150 / 10 000 / 50 000 | 150 / 15 000 / 100 000 | 150 / 15 000 / 100 000 |
 | AE (AED) | 0 / 1 / 2 | 3 000 / 35 000 / 200 000 | 3 000 / 35 000 / 200 000 | 3 000 / 100 000 / 500 000 | 3 000 / 35 000 / 200 000 |
 
@@ -69,7 +70,7 @@ MA and GN limits only matter once those countries switch to `held`.
 
 ### FX arithmetic and rounding
 
-Rates are integers: units of each currency per 1 EUR, scaled by 1e8 (`FX_E8_PER_EUR` in `catalog.js`): EUR 1, MAD 10.85, XOF 655.957, AED 4.25, GNF 9 400.
+Rates are integers: units of each currency per 1 EUR, scaled by 1e8 (`FX_E8_PER_EUR` in `catalog.js`): EUR 1, MAD 10.85, XOF 655.957, XAF 655.957, AED 4.25, GNF 9 400. XOF (Senegal, Côte d'Ivoire) and XAF (Cameroon) are both pegged to the euro at the same rate but are distinct currencies: they never mix in one account.
 
 `convert(minor, from, to, round)` in `core.js` computes `minor × rate[to] × 10^dec[to] / (rate[from] × 10^dec[from])` in BigInt. `round = 'down'` (default) truncates; `'up'` adds one minor unit when there is a remainder.
 
@@ -229,6 +230,37 @@ Escrow 60 000 F CFA, disputed, resolved `split` with `payeeAmount` 20 000 (payee
 
 Payer: 100 000 − 60 000 + 40 000 = 80 000. `release` and `refund` outcomes post the release or refund rows above for the full amount.
 
+### In-person collection ("Encaisser", `modules/pos.js`)
+
+held: `pos.charge` writes a `pos_sales` row and calls `startCollection` with `purpose.type = 'pos'`: the partner sends a payment request to the customer's mobile money, approved on the customer's own phone. Nothing is posted until the webhook. `collection.succeeded` → `collectionHandlers.pos`:
+
+| Entry `pos_sale` (idem `pos:<op>`) | XOF |
+|---|---|
+| `sys:rail` | −9 000 |
+| `W(merchant)` | +9 000 |
+
+`collection.failed` → `collectionFailedHandlers.pos` marks the sale `failed`; nothing was credited. A collection that arrives for a sale no longer `pending` goes back to the payer (`returnCollection`). No card is read: a web app cannot use a phone's NFC for EMV cards, which needs a native app and a certified acceptance SDK.
+
+record: `pos.chargeRecorded` writes the sale and a recorded payment (`ref: pos:<sale>`) that the customer confirms by scanning the code or opening the link; no posting, as for any record-custody payment.
+
+### Earned-wage advance (`modules/advance.js`)
+
+held only. A licensed lender funds a credit line at the payment partner; Nexus records it as the system account `lender` (allowed to go negative, counted with `rail` in coverage). In live the module stays closed until `ADVANCE_LENDER` is set, and that requires `PAYMENT_PROVIDER=partner`.
+
+Eligibility, from money that reached the wallet in the last 90 days (entry kinds other than `topup`, `advance`, refunds and returns; self-logged trips never count): KYC ≥ 1, account at least `minAgeDays` old, income on at least `minEarningDays` distinct days, no advance outstanding (unique index). Maximum = min(`cap`, `share` × average monthly income). One flat `fee`, shown in the quote: no interest, no late fee. Values in `PRICING.advance` (placeholders until the lender's tariff is signed).
+
+| Entry `advance` (idem `advance:<id>`) | XOF |
+|---|---|
+| `sys:lender` | −30 000 |
+| `W(user)` | +30 000 |
+
+| Entry `advance_repay` (manual `advance.repay`, or the hourly `collectDueAdvances` from the due date) | XOF |
+|---|---|
+| `W(user)` | −31 000 (or what the wallet holds) |
+| `sys:lender` | +31 000 |
+
+After full repayment `sys:lender` holds +1 000: the fee, owed to the lender. Repayments are exempt from spending limits and do not use them up (`OUTFLOW_EXEMPT` in `ledger.js`). A wallet empty at the due date is collected again each hour until repaid, with a daily reminder; the amount owed never grows.
+
 ## Reconciliation and coverage
 
 Both run hourly in `checkLedger()` (`server/scheduler.js`) and on every `GET /api/admin/overview`. A failure logs `LEDGER ALERT` and sends an in-app message to every active admin (at most once per admin per hour).
@@ -238,7 +270,7 @@ Both run hourly in `checkLedger()` (`server/scheduler.js`) and on every `GET /ap
 **Coverage ("safeguarding")** (`safeguarding()` in `admin.js`), per currency:
 
 - `owed` = sum of balances of every non-system account (user wallets and tontine pots) **plus** system `escrow`, `payout_pending`, `returns`, `remit_transit`, `fx_out`.
-- `held_at_partner` = minus the sum of system `rail`, `fx`, `adjustments`, `commissions`.
+- `held_at_partner` = minus the sum of system `rail`, `fx`, `adjustments`, `commissions`, `lender` (the lender's credit line is money at the partner).
 - `ok` when `owed ≤ held_at_partner`.
 
 Read it carefully. Every entry balances per currency, so all accounts of a currency always sum to zero. The only account kind in neither list is `fees`, so `held_at_partner − owed = fees` by construction. The check is therefore an internal consistency check: it fails only if the ledger itself is broken (unbalanced data written outside `post()`, or a new account kind not added to either list). It does **not** compare against money actually held at the partner. That requires importing the partner's statement or balance per currency and comparing it with `-rail` (and the FX settlement), which is **not implemented** ([partner-integration.md](partner-integration.md)).

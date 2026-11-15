@@ -18,6 +18,8 @@ Sandbox only. No licence and no payment partner are signed. Everything external 
 | Identity checks | One tap (`wallet.verify`), or an admin sets the level | Partner or KYC vendor writing `users.kyc_level` |
 | FX rates and fees | Static values in `server/catalog.js` | Partner quotes |
 | Bill payment | Simulated payout | Biller integrations |
+| In-person collection (`pos`) | Payment request settled by the simulated partner | The partner's collection API (same as top-ups); no card reading: that needs a native app and a certified SDK |
+| Earned-wage advances (`advance`) | Simulated lender credit line | A licensed lender funding a line at the partner; closed in live until `ADVANCE_LENDER` is set |
 
 See [docs/partner-integration.md](docs/partner-integration.md) for the full list.
 
@@ -33,11 +35,11 @@ sudo -u postgres createdb -O nexus nexus_test
 
 # 2. Install, seed, build, run
 npm install
-npm run seed                     # migrates, then creates 19 demo accounts (PIN 2580); does nothing if users exist
+npm run seed                     # migrates, then creates 39 demo accounts (PIN 2580); does nothing if users exist
 npm run build                    # builds the PWA into dist/
 npm run server                   # http://localhost:3001 (serves dist/ and /api)
 
-# 3. Tests (53, end to end, against nexus_test; the schema is dropped and recreated)
+# 3. Tests (77, end to end, against nexus_test; the schema is dropped and recreated)
 npm test
 ```
 
@@ -46,7 +48,9 @@ Migrations in `server/migrations/` run automatically at server start and at seed
 
 **Dev mode.** Run `npm run server` in one terminal and `npm run dev` in another. Vite serves the interface with hot reload on its own port (5173 by default) and proxies `/api` to `http://localhost:3001` (`vite.config.js`).
 
-**First admin.** `NEXUS_ENV=sandbox npm run admin:create -- +33600000099` grants the admin role to an existing account (sign up in the app first). `NEXUS_ENV` must be set, as for the server.
+**Windows.** `npm run server` and `npm run seed` work as is: they load `NEXUS_ENV=sandbox` from `env/sandbox.env` with `node --env-file`. A variable already set in the shell wins over the file.
+
+**First admin.** `NEXUS_ENV=sandbox npm run admin:create -- +33600000099` (PowerShell: `$env:NEXUS_ENV="sandbox"; npm run admin:create -- +33600000099`) grants the admin role to an existing account (sign up in the app first). `NEXUS_ENV` must be set explicitly here, so the command never defaults to sandbox against a live database.
 
 `npm start` builds and then runs `node server/index.js`; it needs `NEXUS_ENV` in the environment.
 
@@ -74,6 +78,11 @@ All use PIN `2580`. In sandbox the sign-in screen lists them (`GET /api/config/s
 | +33600000003 | Karim Bennani | FR · builder | held |
 | +971500000001 | Abdoulaye Kane | AE · worker | held |
 | +971500000002 | Samir Khalil | AE · trader | held |
+| +224620000003, +224620000004 | Alpha Diallo, Fanta Sylla | GN · ouvrier, parent | record |
+| +2250700000001 … 05 | Adjoua Kouassi, Awa Coulibaly, Yao Konan, Seydou Traoré, Akissi N’Guessan | CI · seller, commerçante, artisan, ouvrier, parent | record |
+| +237650000001 … 05 | Marie Ngono, Jean-Paul Mbarga, Emmanuel Fotso, Ibrahim Moussa, Brigitte Atangana | CM · seller, boutique, artisan, ouvrier, parent | record |
+
+Every profile of every country has one account. In sandbox the sign-in screen groups them by country; once signed in, the people icon at the top of the home screen (or **Services → Changer de compte**) goes back to the list. **Recommencer la démo** at the bottom of the sign-in screen puts every account, balance and history back as seeded (`POST /api/sandbox/reset`, sandbox only; hide it with `SANDBOX_RESET=off`).
 
 ## Configuration
 
@@ -117,7 +126,8 @@ All variables are read in `server/config.js` (plus `CUSTODY_<ID>` in `server/cat
 | [docs/operations.md](docs/operations.md) | Running a pilot, scheduler, runbooks |
 | [docs/partner-integration.md](docs/partner-integration.md) | Go-live checklist for a licensed partner |
 | [docs/pilot.md](docs/pilot.md) | Running the two-country pilot on one server, with phones as SMS gateways and no payment partner |
-| [docs/testing.md](docs/testing.md) | What the 53 tests prove and how to add one |
+| [docs/demo.md](docs/demo.md) | A public sandbox demo on Render in a few clicks (`render.yaml`), with the demo accounts |
+| [docs/testing.md](docs/testing.md) | What the 77 tests prove and how to add one |
 | [docs/glossary.md](docs/glossary.md) | Product and domain terms |
 
 ## Layout

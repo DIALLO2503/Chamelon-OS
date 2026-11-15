@@ -46,9 +46,12 @@ export const config = {
   databaseUrl: env.DATABASE_URL || (NEXUS_ENV === 'test' ? 'postgres://nexus:nexus@localhost:5432/nexus_test' : NEXUS_ENV === 'sandbox' ? 'postgres://nexus:nexus@localhost:5432/nexus' : undefined),
   jwtSecret: secret('JWT_SECRET', 'jwt-secret'),
   linkSecret: secret('LINK_SECRET', 'link-secret'),
-  publicUrl: (env.PUBLIC_URL || `http://localhost:${env.PORT || 3001}`).replace(/\/$/, ''),
+  // Links sent to people point here. RENDER_EXTERNAL_URL is set by Render for the online demo (render.yaml).
+  publicUrl: (env.PUBLIC_URL || env.RENDER_EXTERNAL_URL || `http://localhost:${env.PORT || 3001}`).replace(/\/$/, ''),
   trustProxy: env.TRUST_PROXY ? Number(env.TRUST_PROXY) : 0,
   uploadDir: env.UPLOAD_DIR || path.join(root, '.local', 'uploads'),
+  // STORAGE=s3: photos in an S3-compatible object store (S3, R2, MinIO…) instead of the server's disk.
+  storage: { kind: env.STORAGE || 'disk', bucket: env.S3_BUCKET, region: env.S3_REGION || 'auto', endpoint: env.S3_ENDPOINT, accessKeyId: env.S3_ACCESS_KEY_ID, secretAccessKey: env.S3_SECRET_ACCESS_KEY },
   // Payment rails for "held" custody: sandbox simulates a licensed partner; partner calls a real one over HTTP.
   provider: env.PAYMENT_PROVIDER || (NEXUS_ENV === 'live' ? 'partner' : 'sandbox'),
   partner: { baseUrl: env.PARTNER_BASE_URL, apiKey: env.PARTNER_API_KEY, webhookSecret: env.PARTNER_WEBHOOK_SECRET || (NEXUS_ENV === 'live' ? undefined : 'sandbox-webhook-secret') },
@@ -71,6 +74,11 @@ export const config = {
   whatsapp: { from: env.WHATSAPP_FROM, templates: jsonEnv('WHATSAPP_TEMPLATES') },
   // After a forgotten secret code is replaced, money actions wait this long: time for the owner to react to a stolen phone or SIM.
   pinResetHoldHours: Number(env.PIN_RESET_HOLD_HOURS || 24),
+  // Earned-wage advances are lending: in live they stay closed until a licensed lender funds a credit line at the payment
+  // partner. ADVANCE_LENDER names it (shown in audits); the sandbox simulates one.
+  advances: { lender: env.ADVANCE_LENDER || null },
+  // Sandbox only: a "reset the demo" button on the sign-in screen. SANDBOX_RESET=off hides it (e.g. a demo shown to many people).
+  sandboxReset: NEXUS_ENV === 'sandbox' && env.SANDBOX_RESET !== 'off',
   autoReleaseDays: Number(env.AUTO_RELEASE_DAYS || 7),
   orderReleaseHours: Number(env.ORDER_RELEASE_HOURS || 72),
 }
@@ -87,6 +95,8 @@ if (config.env === 'live') {
     if (!config.partner.baseUrl || !config.partner.apiKey || !config.partner.webhookSecret) throw new Error('Live mode requires PARTNER_BASE_URL, PARTNER_API_KEY and PARTNER_WEBHOOK_SECRET')
   }
   if (!config.sms.provider) throw new Error('Live mode requires SMS_PROVIDER for login codes')
+  // The lender's money reaches people through the partner: no partner, no advances.
+  if (config.advances.lender && config.provider !== 'partner') throw new Error('ADVANCE_LENDER requires PAYMENT_PROVIDER=partner: advances are paid and repaid through the partner')
   if (!['sms', 'whatsapp'].includes(config.notifier)) throw new Error('Live mode requires NOTIFIER=sms or NOTIFIER=whatsapp')
 }
 // A messaging configuration is checked whenever one is given, so a sandbox pointed at a real account fails at boot, not at first send.
@@ -101,6 +111,8 @@ if (config.sms.provider) {
     if (missing.length) throw new Error(`SMS_PROVIDER=smsgate requires SMSGATE_USER/SMSGATE_PASSWORD, or SMSGATE_<ID>_USER/_PASSWORD for each open country (missing: ${missing.join(', ')})`)
   }
 }
+if (!['disk', 's3'].includes(config.storage.kind)) throw new Error('STORAGE must be "disk" or "s3"')
+if (config.storage.kind === 's3' && (!config.storage.bucket || !config.storage.accessKeyId || !config.storage.secretAccessKey)) throw new Error('STORAGE=s3 requires S3_BUCKET, S3_ACCESS_KEY_ID and S3_SECRET_ACCESS_KEY')
 if (!['log', 'sms', 'whatsapp'].includes(config.notifier)) throw new Error('NOTIFIER must be "log", "sms" or "whatsapp"')
 if (config.notifier !== 'log' && !config.sms.provider) throw new Error(`NOTIFIER=${config.notifier} requires SMS_PROVIDER`)
 if (config.notifier === 'whatsapp' && config.sms.provider !== 'twilio') throw new Error('NOTIFIER=whatsapp requires SMS_PROVIDER=twilio')

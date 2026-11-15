@@ -8,6 +8,7 @@ import { notify } from '../rails.js'
 import { log } from '../log.js'
 import { amountField, phoneField, textField } from './shared.js'
 import tontine from './tontine.js'
+import { computeBadges } from '../trust.js'
 import escrow from './escrow.js'
 
 const dayOffset = n => new Date(Date.now() - n * 86400000).toISOString().slice(0, 10)
@@ -100,6 +101,7 @@ export const float = {
     async kpis(ctx) { const k = await opsToday(ctx); return { type: 'kpis', title: "Aujourd'hui", items: [{ label: 'Opérations', value: String(k.n) }, { label: 'Volume', value: ctx.f(k.volume) }] } },
   },
   async insight(ctx) {
+    if (ctx.persona.restricted !== 'agent') return null // float exists region-wide, but only agents run it
     if (!ctx.hasRole('agent')) return { icon: 'clock', text: 'Votre demande d’agrément d’agent est en cours de vérification. Les opérations clients s’activeront après validation.', cta: { label: 'Voir', module: 'float' } }
     const k = await opsToday(ctx), balance = await balanceOf(ctx.client, (await ctx.wallet()).id)
     return k.deposits > balance ? { icon: 'arrow-left-right', text: `Votre float (${ctx.f(balance)}) est inférieur aux dépôts servis aujourd’hui (${ctx.f(k.deposits)}). Pensez à vous réapprovisionner.`, cta: { label: 'Approvisionner', module: 'wallet', action: 'topup' } } : null
@@ -176,7 +178,8 @@ export async function settleCommissions() {
 }
 
 /* ---------------- reputation: derived from kept commitments with distinct people, visible to the user only ---------------- */
-const LEVELS = [[0, 'Premières pièces'], [150, 'Motif'], [400, 'Rosace'], [700, 'Zellij complet']]
+// Levels gate what the app shows (progressive disclosure, engine.js) and lower some prices. Names follow the zellij.
+export const LEVELS = [[0, 'Premières pièces'], [150, 'Motif'], [400, 'Rosace'], [700, 'Zellij complet']]
 const TILES = 36
 
 export async function computeScore(client, user, party) {
@@ -186,9 +189,10 @@ export async function computeScore(client, user, party) {
   const people = (await one(client, `SELECT count(DISTINCT cp)::int AS n FROM (
       SELECT CASE WHEN payer_party=$1 THEN payee_party ELSE payer_party END AS cp FROM recorded_payments WHERE status='confirmed' AND (payer_party=$1 OR payee_party=$1)
       UNION SELECT CASE WHEN payer_party=$1 THEN payee_party ELSE payer_party END FROM escrows WHERE status IN ('released','paid') AND (payer_party=$1 OR payee_party=$1)
-      UNION SELECT p.cp_party FROM postings p JOIN accounts a ON a.id=p.account_id WHERE a.owner=$2 AND a.kind='wallet' AND p.cp_party IS NOT NULL) x`, [pid, user.id])).n
+      UNION SELECT d.cp_party FROM postings p JOIN posting_details d ON d.posting_id=p.id JOIN accounts a ON a.id=p.account_id WHERE a.owner=$2 AND a.kind='wallet' AND d.cp_party IS NOT NULL) x`, [pid, user.id])).n
   const contribs = await tontine.contributions(client, pid)
   const late = await tontine.lateFor(client, pid)
+  const defaults = await tontine.defaultsFor(client, pid)
   const kept = await escrow.kept(client, pid)
   const confirmed = (await one(client, `SELECT count(*)::int AS n FROM recorded_payments WHERE status='confirmed' AND (payer_party=$1 OR payee_party=$1)`, [pid])).n
   const lost = (await one(client, `SELECT count(*)::int AS n FROM disputes WHERE status='resolved' AND resolution->>'against' = $1`, [pid])).n
@@ -198,14 +202,28 @@ export async function computeScore(client, user, party) {
     ['Engagements tenus (acomptes et étapes payés)', kept, 10, 300],
     ['Ancienneté du compte', age, 180, 150],
   ].map(([label, n, cap, weight]) => ({ label, pct: Math.min(1, n / cap), weight }))
-  const penalty = late * 40 + lost * 120
+  const penalty = late * 40 + defaults * 60 + lost * 120
   const value = Math.max(0, Math.round(signals.reduce((s, x) => s + x.pct * x.weight, 0)) - penalty)
   const level = LEVELS.findLastIndex(([min]) => value >= min)
   // One tile per kept commitment; a person who confirms many payments still fills at most three tiles.
   const tiles = Math.min(TILES, contribs + kept + Math.min(confirmed, people * 3))
-  return { value, level, signals, penalty, tiles }
+  return { value, level, signals, penalty, tiles, people, contribs, late, kept, confirmed, lost }
 }
 export const levelOf = async ctx => (await computeScore(ctx.client, ctx.user, ctx.party)).level
+
+// Compact version for the home screen: the value, the level and how far the next one is. Opens the full view.
+export async function scoreCard(ctx, title, { unlock = null } = {}) {
+  const s = await computeScore(ctx.client, ctx.user, ctx.party)
+  const [floor, name] = LEVELS[s.level], next = LEVELS[s.level + 1]
+  const badges = (await computeBadges(ctx.client, ctx.user, ctx.party, s)).filter(b => b.earned).map(b => ({ icon: b.icon, label: b.label }))
+  return {
+    type: 'scorecard', title, value: s.value, name, level: s.level + 1,
+    pct: next ? (s.value - floor) / (next[0] - floor) : 1,
+    next: next ? `Encore ${next[0] - s.value} points pour « ${next[1]} »` : 'Niveau maximum atteint',
+    badges, unlock,
+    cta: { label: 'Voir le détail', module: 'score' },
+  }
+}
 
 /* ---------------- reputation: derived from kept commitments with distinct people, visible to the user only ---------------- */
 export const score = {
@@ -219,9 +237,26 @@ export const score = {
       { type: 'zellij', filled: s.tiles, total: TILES, level: s.level + 1, name: LEVELS[s.level][1],
         next: next ? `Encore ${next[0] - s.value} points pour « ${next[1]} »` : 'Votre zellij est complet', perks },
       { type: 'score', value: s.value, note: `Calculée à partir de vos engagements tenus avec des personnes différentes. Vous seul la voyez.${s.penalty ? ` Retards et litiges perdus : −${s.penalty}.` : ''}`, signals: s.signals.map(x => ({ label: x.label, pct: x.pct })) },
-      { type: 'note', title: 'Comment poser une pièce', text: 'Chaque engagement tenu pose une pièce : une paie ou un paiement confirmé par l’autre personne, une cotisation versée, une étape validée. Les allers-retours avec la même personne ne comptent pas plus de trois fois.' }], actions: [] }
+      { type: 'badges', title: 'Vos badges', items: await computeBadges(ctx.client, ctx.user, ctx.party, s),
+        shared: ctx.user.share_badges, note: ctx.user.share_badges
+          ? 'Vos badges obtenus sont visibles par les personnes qui ouvrent vos liens (acheteurs, clients, ouvriers). Votre score, lui, reste privé.'
+          : 'Vos badges sont privés. Vous pouvez les montrer aux personnes qui ouvrent vos liens : un acheteur voit alors que d’autres vous ont fait confiance.' },
+      { type: 'note', title: 'Comment poser une pièce', text: 'Chaque engagement tenu pose une pièce : une paie ou un paiement confirmé par l’autre personne, une cotisation versée, une étape validée. Les allers-retours avec la même personne ne comptent pas plus de trois fois.' }],
+      actions: ['shareBadges'] }
   },
-  actions: {},
+  actions: {
+    // Opt-in: earned badges (never the score) on the person's link pages.
+    shareBadges: {
+      label: 'Montrer mes badges', icon: 'award',
+      form: ctx => ({ title: ctx.user.share_badges ? 'Masquer mes badges' : 'Montrer mes badges',
+        info: ctx.user.share_badges ? 'Vos badges ne seront plus visibles sur vos liens.' : 'Les personnes qui ouvrent vos liens verront vos badges obtenus (pas votre score, ni vos montants). Vous pouvez les masquer à tout moment.', fields: [] }),
+      async run(ctx) {
+        const on = !ctx.user.share_badges
+        await ctx.client.query('UPDATE users SET share_badges=$2 WHERE id=$1', [ctx.user.id, on])
+        return { message: on ? 'Vos badges sont visibles sur vos liens.' : 'Vos badges sont masqués.' }
+      },
+    },
+  },
 }
 
 export { FX_E8_PER_EUR as _fx, convert as _convert, ctxFor as _ctxFor }

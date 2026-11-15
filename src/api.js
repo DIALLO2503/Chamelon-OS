@@ -3,14 +3,25 @@ let accessToken = null
 let onExpired = () => {}
 let refreshing = null
 
+// Read-only offline view: the last screens seen (profile, home, modules) are kept on this device, so a shopkeeper or an
+// artisan with no signal can still read their balances and records. Never used for an action; cleared at sign-out.
+const CACHE = 'nexus-cache:'
+const CACHED = /^\/(me|home|modules\/[a-z]+)$/
+const cacheGet = path => { try { return JSON.parse(localStorage.getItem(CACHE + path)) } catch { return null } }
+const cachePut = (path, data) => { try { localStorage.setItem(CACHE + path, JSON.stringify({ at: Date.now(), data })) } catch {} }
+export const clearCache = () => { try { Object.keys(localStorage).filter(k => k.startsWith(CACHE)).forEach(k => localStorage.removeItem(k)) } catch {} }
+const offlineError = () => Object.assign(new Error('Pas de connexion. Vérifiez le réseau et réessayez.'), { offline: true })
+
 export const session = {
   get active() { return Boolean(accessToken) },
   set(token) { accessToken = token },
   onExpired(fn) { onExpired = fn },
   async restore() {
-    try { accessToken = (await request('/auth/refresh', { body: {}, retry: false })).accessToken; return true } catch { return false }
+    try { accessToken = (await request('/auth/refresh', { body: {}, retry: false })).accessToken; return true }
+    // No network but a profile seen before on this device: open read-only from the cache.
+    catch (e) { return Boolean(e.offline && cacheGet('/me')) }
   },
-  async logout() { await request('/auth/logout', { body: {}, retry: false }).catch(() => {}); accessToken = null },
+  async logout() { await request('/auth/logout', { body: {}, retry: false }).catch(() => {}); accessToken = null; clearCache() },
 }
 
 const newKey = () => (crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(16).slice(2)}`)
@@ -23,7 +34,11 @@ async function request(path, { body, idem, retry = true, raw, query } = {}) {
   let res
   try {
     res = await fetch(url, { method: body !== undefined || raw ? 'POST' : 'GET', headers, credentials: 'same-origin', body: raw ?? (body !== undefined ? JSON.stringify(body) : undefined) })
-  } catch { throw new Error('Pas de connexion. Vérifiez le réseau et réessayez.') }
+  } catch {
+    const hit = body === undefined && !raw && CACHED.test(path) ? cacheGet(path) : null
+    if (hit) return { ...hit.data, _offline: hit.at }
+    throw offlineError()
+  }
   if (res.status === 401 && retry && accessToken && !path.startsWith('/auth/')) {
     refreshing ??= session.restore().finally(() => { refreshing = null })
     if (await refreshing) return request(path, { body, idem, retry: false, raw, query })
@@ -32,6 +47,7 @@ async function request(path, { body, idem, retry = true, raw, query } = {}) {
   }
   const data = await res.json().catch(() => ({}))
   if (!res.ok) throw Object.assign(new Error(data.error || 'Une erreur est survenue'), { status: res.status })
+  if (body === undefined && !raw && CACHED.test(path)) cachePut(path, data)
   return data
 }
 

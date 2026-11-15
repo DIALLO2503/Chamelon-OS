@@ -180,6 +180,34 @@ test('scheduled transfers pay once per month even when two runs overlap', async 
   await healthy(assert)
 })
 
+test('the demo reset exists only in the sandbox: refused in test (and live), hidden from the sign-in screen', async () => {
+  assert.equal((await http('/sandbox/reset', { body: {} })).status, 404)
+  assert.equal((await http('/config/sandbox')).reset, false)
+})
+
+test("Côte d'Ivoire and Cameroon: local accounts in F CFA, and the diaspora pays out in XOF / XAF", async () => {
+  const ci = await user('CI', 'commercante'), cm = await user('CM', 'boutique')
+  const ciHome = await engine.home(ci.id), cmMe = await engine.me(cm.id)
+  assert.match(ciHome.blocks[0].amount, /F CFA$/)
+  assert.equal(cmMe.experience.region.currency.code, 'XAF')
+  assert.ok(cmMe.experience.nav.some(m => m.label === 'Njangi'), 'Cameroon names the savings group njangi')
+
+  const sender = await user('FR', 'sender', { fund: 1000 })
+  const phones = []
+  for (const [region, name] of [['CI', 'Tantie Abidjan'], ['CM', 'Papa Douala']]) {
+    const p = phone(region)
+    phones.push(p)
+    await act(sender, 'family', 'add', { phone: p, name })
+    const b = await one(pool, 'SELECT id FROM beneficiaries WHERE user_id=$1 AND name=$2', [sender.id, name])
+    await act(sender, 'remit', 'send', { amount: '100', to: b.id })
+  }
+  const payouts = await all(pool, `SELECT currency, amount FROM provider_ops WHERE kind='payout' AND phone = ANY($1) ORDER BY currency`, [phones])
+  assert.deepEqual(payouts.map(p => p.currency), ['XAF', 'XOF'])
+  for (const p of payouts) assert.equal(p.amount, 65595, '100 € at the fixed CFA rate (655,957), rounded down')
+  await settleAll()
+  await healthy(assert)
+})
+
 test('credit book: WhatsApp reminder, customer reports repayment on the statement page, shop confirms', async () => {
   const shop = await user('MA', 'hanout')
   const custPhone = phone('MA')

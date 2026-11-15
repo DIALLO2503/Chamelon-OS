@@ -14,6 +14,8 @@ import { stagesOf, jobOps } from './modules/jobs.js'
 import { orderOps } from './modules/commerce.js'
 import { tontineOps, membersOf } from './modules/tontine.js'
 import { owedBy } from './modules/commerce.js'
+import { publicTrust } from './trust.js'
+import { computeScore } from './modules/work.js'
 
 const f = (amount, code) => money(amount, code)
 const pseudoCtx = (client, party) => ({ client, party, user: { name: party.name } })
@@ -30,6 +32,7 @@ const KINDS = {
       const incoming = r.payee_party === party.id
       return { title: r.purpose, lines: [[incoming ? 'De' : 'À', mask(incoming ? r.payer_name : r.payee_name)], ['Montant', f(r.amount, r.currency)], ['Signalé par', mask(r.by_name)]],
         status: { claimed: 'En attente de votre réponse', confirmed: 'Confirmé', rejected: 'Refusé' }[r.status],
+        trustParty: r.recorded_by !== party?.id ? r.recorded_by : null,
         actions: r.status === 'claimed' && r.recorded_by !== party.id ? [act('confirm', incoming ? 'Je confirme avoir reçu' : 'Je confirme ce paiement', { tone: 'primary' }), act('reject', 'Ce n’est pas exact')] : [] }
     },
     confirm: (c, link, party) => settleRecorded(c, link.ref_id, party, true).then(() => 'Merci, paiement confirmé'),
@@ -46,7 +49,8 @@ const KINDS = {
       }
       if (e.status === 'disputed' && [e.payer_party, e.payee_party].includes(party.id)) actions.push(evidenceAct())
       return { title: e.title, lines: [['Pour', mask(payee.name)], ['Montant', f(e.amount, e.currency)], ['Protection', e.mode === 'held' ? 'L’argent reste bloqué et n’est versé qu’avec votre accord' : `Payez directement ${mask(payee.name)}, puis signalez-le ici`]],
-        status: { requested: 'En attente de paiement', claimed: 'Paiement signalé', held: 'Fonds bloqués', released: 'Versé', paid: 'Payé', refunded: 'Remboursé', cancelled: 'Annulé', disputed: 'Litige en cours' }[e.status], actions }
+        status: { requested: 'En attente de paiement', claimed: 'Paiement signalé', held: 'Fonds bloqués', released: 'Versé', paid: 'Payé', refunded: 'Remboursé', cancelled: 'Annulé', disputed: 'Litige en cours' }[e.status], actions,
+        trustParty: e.payee_party !== party?.id ? e.payee_party : null }
     },
     async pay(c, link, party, input) { const r = await fundByCollection(c, await loadEscrow(c, link.ref_id), input.phone); return `Validez le paiement de ${f(r.amount, r.currency)} sur votre téléphone.` },
     async claimPaid(c, link, party) {
@@ -82,7 +86,7 @@ const KINDS = {
       if (cur?.status === 'disputed' && role) actions.push(evidenceAct())
       const label = { planned: 'à venir', requested: 'financement demandé', funded: 'financée', done: 'terminée, à valider', validated: 'validée, à payer', claimed: 'paiement signalé', paid: 'payée', disputed: 'litige' }
       return { title: job.title, lines: [[role === 'artisan' ? 'Client' : 'Artisan', mask(other.name)], ...stages.map(s => [`Étape ${s.position} · ${s.title}`, `${f(s.amount, job.currency)} · ${label[s.status]}${s.proof.length ? ` · ${s.proof.length} photo(s)` : ''}`])],
-        status: cur ? `Étape ${cur.position} en cours` : 'Chantier terminé', actions, proof: cur?.proof ?? [] }
+        status: cur ? `Étape ${cur.position} en cours` : 'Chantier terminé', actions, proof: cur?.proof ?? [], trustParty: other.id }
     },
     request: async (c, link, party) => { await jobOps.requestFunding(c, link.ref_id, party); return 'Demande envoyée. Le client reçoit un lien pour payer l’étape.' },
     async evidence(c, link, party, input) {
@@ -142,7 +146,7 @@ const KINDS = {
 
   order: {
     async view(c, link, party) {
-      const o = await one(c, 'SELECT o.*, u.name AS seller_name, u.phone AS seller_phone FROM orders o JOIN users u ON u.id=o.seller_id WHERE o.id=$1', [link.ref_id])
+      const o = await one(c, 'SELECT o.*, u.name AS seller_name, u.phone AS seller_phone, (SELECT id FROM parties WHERE user_id=o.seller_id) AS seller_party FROM orders o JOIN users u ON u.id=o.seller_id WHERE o.id=$1', [link.ref_id])
       const isBuyer = party && o.buyer_party === party.id
       const actions = []
       if (o.status === 'pending') actions.push(o.mode === 'held' ? act('pay', 'Payer par mobile money', { otp: false, tone: 'primary', fields: [phoneInput()] }) : act('claimPaid', 'J’ai payé', { otp: false, tone: 'primary', fields: [phoneInput('Le numéro qui a payé')] }))
@@ -151,7 +155,7 @@ const KINDS = {
       if (['paid', 'delivered'].includes(o.status) && isBuyer && o.mode === 'held') actions.push(act('dispute', 'Signaler un problème', { fields: [{ name: 'reason', label: 'Que s’est-il passé ?', type: 'text' }] }))
       return { title: o.item, lines: [['Vendeuse', mask(o.seller_name)], ['Prix', f(o.amount, o.currency)],
         o.mode === 'held' ? ['Protection', 'Votre argent est versé à la vendeuse seulement quand vous confirmez la réception'] : ['Comment payer', `Payez directement au ${o.seller_phone} (Wave, Orange Money…), puis appuyez sur « J’ai payé »`]],
-        status: { pending: 'À payer', claimed: 'Paiement signalé', paid: 'Payé', delivered: 'Livré, à confirmer', completed: 'Terminé', disputed: 'Litige en cours', refunded: 'Remboursé', cancelled: 'Annulé' }[o.status], actions }
+        status: { pending: 'À payer', claimed: 'Paiement signalé', paid: 'Payé', delivered: 'Livré, à confirmer', completed: 'Terminé', disputed: 'Litige en cours', refunded: 'Remboursé', cancelled: 'Annulé' }[o.status], actions, trustParty: o.seller_party }
     },
     pay: async (c, link, party, input) => { await orderOps.payByCollection(c, link.ref_id, input.phone); return 'Validez le paiement sur votre téléphone.' },
     claimPaid: async (c, link, party, input) => { await orderOps.claimPaid(c, link.ref_id, input.phone); return 'Paiement signalé. La vendeuse doit confirmer.' },
@@ -212,7 +216,10 @@ export const publicRoutes = Router()
 publicRoutes.get('/:token', async (req, res) => {
   const link = await resolveLink(pool, req.params.token)
   const party = link.party_id ? await partyById(pool, link.party_id) : null
-  const view = await KINDS[link.kind].view(pool, link, party)
+  const { trustParty, ...view } = await KINDS[link.kind].view(pool, link, party)
+  // The badges of the person the visitor deals with, only if they chose to show them (never their score).
+  const trust = trustParty && await publicTrust(pool, trustParty, computeScore)
+  if (trust) view.trust = trust
   await pool.query('UPDATE links SET opens = opens + 1, first_opened_at = COALESCE(first_opened_at, now()) WHERE id=$1', [link.id])
   res.json({ kind: link.kind, ...view, phone: party ? `${party.phone.slice(0, 4)} •••• ${party.phone.slice(-2)}` : null })
 })

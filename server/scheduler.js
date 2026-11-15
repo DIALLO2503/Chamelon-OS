@@ -8,6 +8,7 @@ import { autoReleaseDue, releaseEscrow } from './modules/escrow.js'
 import { runDueSchedules } from './modules/remit.js'
 import { dueTontines, membersOf } from './modules/tontine.js'
 import { settleCommissions } from './modules/work.js'
+import { collectDueAdvances } from './modules/advance.js'
 import { safeguarding } from './admin.js'
 
 const LOCK_ID = 7340021
@@ -51,7 +52,7 @@ async function tick(hourly) {
       await pool.query(`UPDATE intents SET status='expired' WHERE status='quoted' AND expires_at < now()`)
       await autoRelease()
       await runDueSchedules()
-      if (hourly) { await tontineReminders(); await settleCommissions(); await checkLedger() }
+      if (hourly) { await tontineReminders(); await settleCommissions(); await collectDueAdvances(); await checkLedger() }
     } finally { await c.query('SELECT pg_advisory_unlock($1)', [LOCK_ID]) }
   } catch (err) { log.error({ err }, 'scheduler tick failed') } finally { c.release() }
 }

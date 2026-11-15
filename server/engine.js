@@ -1,4 +1,5 @@
 import { pool, tx, one } from './db.js'
+import { config } from './config.js'
 import { MODULES, ACTIONS, REGIONS, fill, validateCatalog, moduleAvailable } from './catalog.js'
 import { fail, toMinor, normalizePhone, newId, sha256, stable } from './core.js'
 import { ctxFor, balanceBlock, feedBlock } from './context.js'
@@ -9,14 +10,23 @@ import escrow from './modules/escrow.js'
 import jobs from './modules/jobs.js'
 import { remit, family } from './modules/remit.js'
 import { orders, creditbook, invoices } from './modules/commerce.js'
-import { shifts, budget, float, score } from './modules/work.js'
+import { shifts, budget, float, score, scoreCard, computeScore, LEVELS } from './modules/work.js'
+import { trendBlock, moneyAlerts } from './insights.js'
+import { notify } from './rails.js'
 import inbox from './modules/inbox.js'
+import pos from './modules/pos.js'
+import advance from './modules/advance.js'
+import { setModules } from './catalog-runtime.js'
+import { tr } from './i18n.js'
+import { driftSuggestion } from './drift.js'
 
-export const MODS = { wallet, tontine, escrow, jobs, remit, family, orders, creditbook, invoices, shifts, budget, float, score, inbox }
+export const MODS = { wallet, tontine, escrow, jobs, remit, family, orders, creditbook, invoices, shifts, budget, float, score, pos, advance, inbox }
 validateCatalog(MODS)
+setModules(MODS) // the runtime catalog validates new regions and profiles against the same registry
 
 const INTENT_TTL_MIN = 10
-const label = (ctx, text) => fill(text, ctx.region.vocab)
+// Module names and quick actions in the person's language (server/i18n.js), then the country's own words.
+const label = (ctx, text) => fill(tr(text, ctx.user.locale), ctx.region.vocab)
 
 function enabledModules(ctx) {
   return [...new Set([...ctx.persona.nav, ...ctx.region.modules])].filter(id => moduleAvailable(ctx.region, id))
@@ -71,20 +81,49 @@ function parseInput(fields, raw, ctx) {
   return out
 }
 
-export async function experience(client, ctx) {
+// Progressive disclosure: what the app SHOWS grows with the reputation level. It is visibility only, never permission:
+// a locked module still opens from a link, an insight or a request someone sent (moduleFor does not look at levels),
+// and every money rule (KYC, custody, roles) applies as before. The persona's first module (its wedge) is never locked.
+const MAX_ACTIONS = 4
+const isLocked = (ctx, id, level) => (MODULES[id].unlock ?? 0) > level && id !== ctx.persona.nav[0]
+export const actionCount = level => Math.min(MAX_ACTIONS, 2 + level)
+
+export async function experience(client, ctx, s = null) {
+  s ??= await computeScore(client, ctx.user, ctx.party)
   const mod = id => ({ id, icon: MODULES[id].icon, label: label(ctx, MODULES[id].label) })
   const enabled = enabledModules(ctx)
-  const nav = ctx.persona.nav.filter(id => enabled.includes(id))
+  const visible = enabled.filter(id => !isLocked(ctx, id, s.level))
+  const nav = ctx.persona.nav.filter(id => visible.includes(id))
   const actions = ctx.persona.actions.map(id => ({ id, ...ACTIONS[id] })).filter(a => a.opens
-    ? enabled.includes(a.opens)
-    : enabled.includes(a.module) && Object.hasOwn(MODS[a.module].actions, a.action) && actionAllowed(ctx, a.module, a.action, MODS[a.module].actions[a.action]))
+    ? visible.includes(a.opens)
+    : visible.includes(a.module) && Object.hasOwn(MODS[a.module].actions, a.action) && actionAllowed(ctx, a.module, a.action, MODS[a.module].actions[a.action]))
+  const locked = enabled.filter(id => isLocked(ctx, id, s.level)).map(id => {
+    const at = MODULES[id].unlock
+    return { ...mod(id), level: at + 1, name: LEVELS[at][1], pointsLeft: Math.max(0, LEVELS[at][0] - s.value) }
+  }).sort((a, b) => a.level - b.level)
   return {
     region: { id: ctx.user.region, name: ctx.region.name, currency: ctx.cur, custody: ctx.region.custody },
     persona: { id: ctx.user.persona, label: ctx.persona.label, icon: ctx.persona.icon, hue: ctx.persona.hue, presentation: ctx.persona.presentation ?? {} },
     nav: [mod('home'), ...nav.map(mod), mod('services')],
-    services: enabled.filter(id => !nav.includes(id)).map(mod),
-    actions: actions.slice(0, 4).map(a => ({ ...a, label: label(ctx, a.label) })),
+    services: visible.filter(id => !nav.includes(id)).map(mod),
+    actions: actions.slice(0, actionCount(s.level)).map(a => ({ ...a, label: label(ctx, a.label) })),
+    moreActions: actions.length > actionCount(s.level),
+    locked,
+    level: { level: s.level + 1, name: LEVELS[s.level][1], value: s.value },
   }
+}
+
+// Once per level reached: a message in the inbox and, the first time the home screen is opened, a card saying what is new.
+async function levelUp(ctx, s, exp) {
+  if (s.level === 0) return null
+  const dedupe = `level-up:${ctx.user.id}:${s.level}`
+  if (await one(pool, 'SELECT 1 FROM notifications WHERE dedupe=$1', [dedupe])) return null
+  const fresh = Object.entries(MODULES).filter(([id, m]) => m.unlock === s.level && enabledModules(ctx).includes(id)).map(([id, m]) => label(ctx, m.label))
+  const extra = actionCount(s.level) > actionCount(s.level - 1) && exp.actions.length > actionCount(s.level - 1) ? 'une action rapide de plus sur l’accueil' : null
+  const news = [...fresh, extra].filter(Boolean)
+  const text = `Bravo, niveau ${s.level + 1} « ${LEVELS[s.level][1]} » !${news.length ? ` Nouveau : ${news.join(', ')}.` : ''}`
+  await notify(pool, { userId: ctx.user.id, template: 'level.up', text, dedupe })
+  return { type: 'insight', icon: 'sparkles', text, cta: { label: 'Voir ma réputation', module: 'score' } }
 }
 
 export async function me(userId) {
@@ -93,29 +132,46 @@ export async function me(userId) {
   const pendingRoles = (await c.query(`SELECT role FROM roles WHERE user_id=$1 AND status='pending'`, [userId])).rows.map(r => r.role)
   const unread = (await one(c, 'SELECT count(*)::int AS n FROM notifications WHERE user_id=$1 AND read_at IS NULL', [userId])).n
   return {
-    user: { id: ctx.user.id, name: ctx.user.name, phone: ctx.user.phone, region: ctx.user.region, persona: ctx.user.persona, kycLevel: ctx.user.kyc_level, pendingRoles, isAdmin: ctx.hasRole('admin') },
+    user: { id: ctx.user.id, name: ctx.user.name, phone: ctx.user.phone, region: ctx.user.region, persona: ctx.user.persona, kycLevel: ctx.user.kyc_level, locale: ctx.user.locale, pendingRoles, isAdmin: ctx.hasRole('admin') },
     experience: await experience(c, ctx), unread,
+    sandbox: config.sandbox, // the interface offers a quick "change account" for testing every profile
   }
 }
 
-async function insight(ctx) {
+const MAX_INSIGHTS = 3
+
+// What needs the person's attention: requests waiting on them (from the modules) first, then alerts computed from their money.
+// A money warning (cash gap, short runway) always keeps one of the slots.
+async function insights(ctx) {
+  const found = []
+  // Profile drift first: the person's activity says they have outgrown their profile.
+  const drift = await driftSuggestion(ctx)
+  if (drift) found.push({ type: 'insight', icon: 'sparkles', text: `${drift.why} : votre activité ressemble à celle du profil « ${drift.label} ». Passer à ce profil ? Vos paiements et votre réputation sont conservés.`, cta: { label: 'Voir le profil', module: 'services' } })
   for (const id of enabledModules(ctx)) {
-    const found = await MODS[id]?.insight?.(ctx)
-    if (found) return { type: 'insight', ...found }
+    const hit = await MODS[id]?.insight?.(ctx)
+    if (hit) found.push({ type: 'insight', ...hit })
+    if (found.length >= MAX_INSIGHTS) break
   }
-  return null
+  const alerts = await moneyAlerts(ctx)
+  const warning = alerts.find(a => a.tone === 'warn')
+  if (warning && found.length >= MAX_INSIGHTS) return [...found.slice(0, MAX_INSIGHTS - 1), warning]
+  return [...found, ...alerts].slice(0, MAX_INSIGHTS)
 }
 
 export async function home(userId) {
   const ctx = await ctxFor(pool, userId)
-  const exp = await experience(pool, ctx)
+  const s = await computeScore(pool, ctx.user, ctx.party)
+  const exp = await experience(pool, ctx, s)
   const blocks = []
+  const nextUnlock = exp.locked[0] ? `Prochain déblocage : ${exp.locked[0].label} au niveau « ${exp.locked[0].name} » (encore ${exp.locked[0].pointsLeft} points)` : null
   for (const w of ctx.persona.home) {
     const title = label(ctx, w.title)
     if (w.type === 'balance') blocks.push(await balanceBlock(ctx, w.caption))
     else if (w.type === 'actions') blocks.push({ type: 'actions', items: exp.actions })
-    else if (w.type === 'insight') blocks.push(await insight(ctx))
+    else if (w.type === 'insight') { const up = await levelUp(ctx, s, exp); blocks.push(...(up ? [up] : []), ...await insights(ctx)) }
     else if (w.type === 'feed') blocks.push(await feedBlock(ctx, title, 8))
+    else if (w.type === 'trend') blocks.push(await trendBlock(ctx, title))
+    else if (w.type === 'reputation') { if (enabledModules(ctx).includes('score')) blocks.push(await scoreCard(ctx, label(ctx, w.title), { unlock: nextUnlock })) }
     else if (moduleAvailable(ctx.region, w.module)) {
       const block = await MODS[w.module].widgets[w.type](ctx, w)
       if (block && !(block.type === 'rows' && !block.rows.length)) blocks.push({ ...block, title, module: w.module })

@@ -1,0 +1,32 @@
+# Online demo on Render (https://render.com): the sandbox, with the 39 demo accounts (PIN 2580).
+# Sandbox only. It shows login codes on screen and lists every account, so never use it for real people (see docs/demo.md).
+# Deploy: Render dashboard > New > Blueprint > pick this repository. Render reads this file and creates both pieces.
+services:
+  - type: web
+    name: nexus-demo
+    runtime: docker
+    plan: free
+    dockerfilePath: ./Dockerfile
+    # The seed migrates, then fills the demo accounts once; on later starts it does nothing.
+    dockerCommand: sh -c "node server/seed.js && node server/index.js"
+    healthCheckPath: /api/health
+    envVars:
+      - key: NEXUS_ENV
+        value: sandbox
+      - key: DATABASE_URL
+        fromDatabase:
+          name: nexus-demo-db
+          property: connectionString
+      - key: JWT_SECRET
+        generateValue: true
+      - key: LINK_SECRET
+        generateValue: true
+      # Render puts one proxy in front of the app: needed for the rate limits to see the real client address.
+      - key: TRUST_PROXY
+        value: "1"
+
+databases:
+  - name: nexus-demo-db
+    plan: free
+    databaseName: nexus
+    user: nexus

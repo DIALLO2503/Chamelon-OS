@@ -17,6 +17,10 @@ import { uploadRoutes, publicUploadRoutes } from './uploads.js'
 import { adminRoutes } from './admin.js'
 import { handleWebhook, startOutboxWorker, resolveLink } from './rails.js'
 import { startScheduler } from './scheduler.js'
+import { loadCatalog, startCatalogSync } from './catalog-runtime.js'
+import { personaChoices, switchPersona } from './drift.js'
+import { LOCALES } from './i18n.js'
+import { ctxFor } from './context.js'
 
 const dist = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'dist')
 const testing = config.env === 'test'
@@ -39,8 +43,29 @@ app.get('/api/config/regions', (_, res) => res.json({ regions: listRegions() }))
 // Sandbox only: ready-made test accounts on the sign-in screen. Disabled entirely in live.
 app.get('/api/config/sandbox', async (_, res) => {
   if (!config.sandbox) return res.json({ accounts: [] })
-  const users = await all(pool, `SELECT u.phone, u.name, u.region, u.persona, EXISTS (SELECT 1 FROM roles r WHERE r.user_id=u.id AND r.role='admin' AND r.status='active') AS admin FROM users u ORDER BY u.created_at LIMIT 30`)
-  res.json({ pin: '2580', accounts: users.map(u => ({ phone: u.phone, name: u.name, label: u.admin ? 'Administration' : `${REGIONS[u.region].personas[u.persona].label} · ${REGIONS[u.region].name} (${REGIONS[u.region].custody === 'held' ? 'avec partenaire' : 'paiements en direct'})` })) })
+  const users = await all(pool, `SELECT u.phone, u.name, u.region, u.persona, EXISTS (SELECT 1 FROM roles r WHERE r.user_id=u.id AND r.role='admin' AND r.status='active') AS admin FROM users u ORDER BY u.created_at LIMIT 100`)
+  // Grouped by country in catalog order, administrators first, so every profile is one tap away.
+  const order = Object.keys(REGIONS)
+  const accounts = users.map(u => ({
+    phone: u.phone, name: u.name,
+    group: u.admin ? 'Administration' : `${REGIONS[u.region].name} · ${REGIONS[u.region].custody === 'held' ? 'avec partenaire de paiement' : 'paiements en direct'}`,
+    label: u.admin ? 'Administration' : REGIONS[u.region].personas[u.persona].label,
+    rank: u.admin ? -1 : order.indexOf(u.region),
+  })).sort((a, b) => a.rank - b.rank)
+  res.json({ pin: '2580', reset: config.sandboxReset, accounts: accounts.map(({ rank, ...a }) => a) })
+})
+// Sandbox only: back to the original demo data (every account, balance and history), e.g. after testing every profile.
+let resetting = false
+app.post('/api/sandbox/reset', limit(3), async (req, res) => {
+  if (!config.sandboxReset) return res.status(404).json({ error: 'Introuvable' })
+  if (resetting) return res.status(409).json({ error: 'Réinitialisation déjà en cours' })
+  resetting = true
+  try {
+    const { resetDemo } = await import('./seed.js')
+    const accounts = await resetDemo()
+    log.info({ ip: req.ip, accounts }, 'sandbox reset')
+    res.json({ ok: true, accounts })
+  } finally { resetting = false }
 })
 app.use('/api/auth', limit(20), auth)
 app.use('/api/public', limit(60), publicUploadRoutes, publicRoutes)
@@ -82,6 +107,16 @@ api.post('/me/closure', limit(5, req => req.userId), async (req, res) => {
   res.json({ ok: true, message: 'Demande enregistrée. Notre équipe vous contacte avant de fermer le compte.' })
 })
 api.get('/home', async (req, res) => res.json(await engine.home(req.userId)))
+// Profile drift and choice: the profiles a person may move to, and the switch itself (explicit, audited, 30-day cooldown).
+// Interface language, kept on the account so the server's words follow it.
+api.post('/me/locale', async (req, res) => {
+  const locale = String(req.body?.locale ?? '')
+  if (!LOCALES.includes(locale)) return res.status(400).json({ error: 'Langue non disponible' })
+  await pool.query('UPDATE users SET locale=$2 WHERE id=$1', [req.userId, locale])
+  res.json({ ok: true, locale })
+})
+api.get('/me/personas', async (req, res) => res.json(await personaChoices(await ctxFor(pool, req.userId))))
+api.post('/me/persona', limit(10, req => req.userId), async (req, res) => res.json(await tx(async c => switchPersona(await ctxFor(c, req.userId, req.ip), String(req.body?.to ?? '')))))
 api.get('/modules/:id', async (req, res) => res.json(await engine.moduleView(req.userId, req.params.id)))
 api.get('/modules/:id/actions/:action', async (req, res) => res.json(await engine.actionForm(req.userId, req.params.id, req.params.action, req.query.row ?? null)))
 api.post('/modules/:id/actions/:action', limit(60, req => req.userId), async (req, res) => res.json(await engine.perform(req.userId, req.params.id, req.params.action, { row: req.body?.row ?? null, input: req.body?.input, ...ctxArgs(req) })))
@@ -126,6 +161,8 @@ app.use((err, req, res, _next) => {
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
   await migrate()
+  await loadCatalog()
+  startCatalogSync()
   startOutboxWorker()
   startScheduler()
   app.listen(config.port, () => log.info(`Nexus API on :${config.port} (${config.env})`))

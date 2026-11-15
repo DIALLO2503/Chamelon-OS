@@ -82,7 +82,7 @@ function Insight({ block }) {
   const { openAction, setTab } = useApp()
   const { cta } = block
   return (
-    <div className={`insight ${block.type === 'notice' ? 'notice' : ''}`}>
+    <div className={`insight ${block.type === 'notice' || block.tone === 'warn' ? 'notice' : ''}`} role={block.tone === 'warn' ? 'alert' : undefined}>
       <Icon name={block.icon} size={22} />
       <div>
         <p>{block.text}</p>
@@ -169,6 +169,75 @@ function Bars({ block }) {
   )
 }
 
+// Six months of money received; the current month is highlighted and compared with the same days of last month.
+function Trend({ block }) {
+  const max = Math.max(1, ...block.bars.map(b => b.value)), bw = 30, gap = 14, H = 84
+  return (
+    <Section title={block.title}>
+      <div className="card chart trend">
+        <div className="trend-head">
+          <div><div className="muted">{block.caption}</div><b className="num trend-amount">{block.headline}</b></div>
+          {block.delta && <span className={`pill ${block.delta.tone}`}>{block.delta.text}</span>}
+        </div>
+        <svg viewBox={`0 0 ${block.bars.length * (bw + gap) - gap} ${H + 18}`} role="img" aria-label={`${block.title} : ${block.bars.map(b => `${b.label} ${b.display}`).join(', ')}`}>
+          {block.bars.map((b, i) => {
+            const h = Math.max(3, (b.value / max) * H)
+            return <g key={i}><title>{`${b.label} : ${b.display}`}</title><rect x={i * (bw + gap)} y={H - h} width={bw} height={h} rx="6" className={!b.value ? 'off' : b.current ? 'on' : 'past'} /><text x={i * (bw + gap) + bw / 2} y={H + 14} textAnchor="middle" className={b.current ? 'now' : ''}>{b.label}</text></g>
+          })}
+        </svg>
+        <div className="trend-kpis">{block.kpis.map(k => <div key={k.label}><span className="muted">{k.label}</span><b className={`num ${k.tone ?? ''}`}>{k.value}</b></div>)}</div>
+      </div>
+    </Section>
+  )
+}
+
+// The reputation at a glance on the home screen: value, level and progress to the next one.
+function ScoreCard({ block }) {
+  const { setTab } = useApp()
+  return (
+    <Section title={block.title}>
+      <button className="card scorecard" onClick={() => setTab(block.cta.module)}>
+        <span className="disc soft"><Icon name="gauge" /></span>
+        <div className="grow">
+          <div className="scorecard-top"><b className="num">{block.value}</b><span className="muted">/ 1000 · Niveau {block.level} · {block.name}</span></div>
+          <div className="bar"><i style={{ width: `${Math.round(block.pct * 100)}%` }} /></div>
+          <div className="muted">{block.next}</div>
+          {block.badges?.length > 0 && <div className="badge-chips">{block.badges.map(b => <span key={b.label} className="badge-chip"><Icon name={b.icon} size={14} />{b.label}</span>)}</div>}
+          {block.unlock && <div className="muted unlock-line"><Icon name="lock" size={14} />{block.unlock}</div>}
+        </div>
+        <Icon name="chevron-right" size={18} />
+      </button>
+    </Section>
+  )
+}
+
+// Trust badges: earned ones first, then the ones in progress with how far along they are.
+function Badges({ block }) {
+  const earned = block.items.filter(b => b.earned), next = block.items.filter(b => !b.earned)
+  return (
+    <Section title={block.title}>
+      <div className="card badges">
+        {earned.length === 0 && <div className="row muted">Aucun badge pour le moment. Chaque engagement confirmé vous en rapproche.</div>}
+        {earned.map(b => (
+          <div key={b.id} className="row row-main badge-earned">
+            <span className="disc small"><Icon name={b.icon} size={18} /></span>
+            <div className="grow"><div className="row-title">{b.label}</div><div className="muted">{b.text}</div></div>
+            <Icon name="award" size={18} />
+          </div>
+        ))}
+        {next.map(b => (
+          <div key={b.id} className="row">
+            <div className="row-main"><span className="disc soft small"><Icon name={b.icon} size={18} /></span>
+              <div className="grow"><div className="row-title">{b.label}</div><div className="muted">{b.text}</div><div className="bar"><i style={{ width: `${Math.round((b.have / b.need) * 100)}%` }} /></div></div>
+            </div>
+          </div>
+        ))}
+        <div className="row muted badges-note"><Icon name={block.shared ? 'eye' : 'eye-off'} size={16} /><span>{block.note}</span></div>
+      </div>
+    </Section>
+  )
+}
+
 const Budget = ({ block }) => (
   <Section title={block.title}>
     <div className="card">
@@ -224,7 +293,7 @@ const Note = ({ block }) => (
   </Section>
 )
 
-const TYPES = { balance: Balance, actions: Actions, insight: Insight, notice: Insight, kpis: Kpis, rows: Rows, feed: Feed, bars: Bars, budget: Budget, score: Score, note: Note, zellij: Zellij, goal: Goal }
+const TYPES = { balance: Balance, actions: Actions, insight: Insight, notice: Insight, kpis: Kpis, rows: Rows, feed: Feed, bars: Bars, budget: Budget, score: Score, scorecard: ScoreCard, badges: Badges, trend: Trend, note: Note, zellij: Zellij, goal: Goal }
 
 export default function Block({ block }) {
   const Component = TYPES[block.type]
