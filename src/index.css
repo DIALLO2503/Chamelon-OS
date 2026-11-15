@@ -109,6 +109,17 @@ button:disabled { cursor: not-allowed; }
 .chart rect.on { fill: var(--accent); } .chart rect.off { fill: var(--line); }
 .chart text { fill: var(--muted); font-size: 11px; }
 .chart-total { display: flex; justify-content: space-between; margin-top: 8px; font-weight: 600; }
+.chart rect.past { fill: var(--accent); opacity: 0.35; }
+.chart text.now { fill: var(--fg); font-weight: 700; }
+.trend { display: flex; flex-direction: column; gap: 12px; }
+.trend-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+.trend-amount { display: block; font: 800 1.6em/1.15 'Bricolage Grotesque Variable', system-ui, sans-serif; }
+.trend-kpis { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; padding-top: 10px; border-top: 1px solid var(--line); }
+.trend-kpis b { display: block; font-weight: 700; overflow-wrap: anywhere; }
+.scorecard { display: flex; align-items: center; gap: 12px; padding: 14px; width: 100%; text-align: left; color: inherit; }
+.scorecard > svg { color: var(--muted); }
+.scorecard-top { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+.scorecard-top b { font: 800 1.5em 'Bricolage Grotesque Variable', system-ui, sans-serif; }
 .score { display: flex; align-items: center; gap: 18px; padding: 16px; }
 .score b { font: 800 2.4em 'Bricolage Grotesque Variable', system-ui, sans-serif; }
 .note { display: flex; align-items: center; gap: 12px; padding: 14px; }

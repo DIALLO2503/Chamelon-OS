@@ -52,7 +52,9 @@ Helpers in the file build personas from shared shapes: `shop()`, `seller()`, `pa
 |---|---|---|
 | `balance` | built in (`balanceBlock`) | `caption` optional. Wallet balance in held, "received this month, confirmed" in record. |
 | `actions` | built in | The persona's quick actions. |
-| `insight` | built in | First non-empty `insight()` among enabled modules (a pending confirmation, an invitation, a stage to validate). |
+| `insight` | built in | Up to three cards: every non-empty `insight()` among enabled modules (a pending confirmation, an invitation, a stage to validate), then the money alerts of `server/insights.js` (cash gap or short runway, best weekday for money received). |
+| `trend` | built in | Six months of money received (`server/insights.js`), this month against the same days of last month, plus money out and net. Hidden until something is received. |
+| `reputation` | built in | Compact score card (value, level, progress to the next level) that opens the `score` module. Shown only where `score` is enabled. |
 | `feed` | built in | Last 8 postings (held) or recorded payments (record). |
 | `rows`, `kpis`, `bars`, `budget`, `goal` | `MODS[module].widgets[type]` | Must exist on the module; `source` selects a variant (`family`: `senders` / `beneficiaries`; `remit`: `quote`). Empty `rows` widgets are dropped. |
 

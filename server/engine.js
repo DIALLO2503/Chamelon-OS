@@ -9,7 +9,8 @@ import escrow from './modules/escrow.js'
 import jobs from './modules/jobs.js'
 import { remit, family } from './modules/remit.js'
 import { orders, creditbook, invoices } from './modules/commerce.js'
-import { shifts, budget, float, score } from './modules/work.js'
+import { shifts, budget, float, score, scoreCard } from './modules/work.js'
+import { trendBlock, moneyAlerts } from './insights.js'
 import inbox from './modules/inbox.js'
 
 export const MODS = { wallet, tontine, escrow, jobs, remit, family, orders, creditbook, invoices, shifts, budget, float, score, inbox }
@@ -98,12 +99,21 @@ export async function me(userId) {
   }
 }
 
-async function insight(ctx) {
+const MAX_INSIGHTS = 3
+
+// What needs the person's attention: requests waiting on them (from the modules) first, then alerts computed from their money.
+// A money warning (cash gap, short runway) always keeps one of the slots.
+async function insights(ctx) {
+  const found = []
   for (const id of enabledModules(ctx)) {
-    const found = await MODS[id]?.insight?.(ctx)
-    if (found) return { type: 'insight', ...found }
+    const hit = await MODS[id]?.insight?.(ctx)
+    if (hit) found.push({ type: 'insight', ...hit })
+    if (found.length >= MAX_INSIGHTS) break
   }
-  return null
+  const alerts = await moneyAlerts(ctx)
+  const warning = alerts.find(a => a.tone === 'warn')
+  if (warning && found.length >= MAX_INSIGHTS) return [...found.slice(0, MAX_INSIGHTS - 1), warning]
+  return [...found, ...alerts].slice(0, MAX_INSIGHTS)
 }
 
 export async function home(userId) {
@@ -114,8 +124,10 @@ export async function home(userId) {
     const title = label(ctx, w.title)
     if (w.type === 'balance') blocks.push(await balanceBlock(ctx, w.caption))
     else if (w.type === 'actions') blocks.push({ type: 'actions', items: exp.actions })
-    else if (w.type === 'insight') blocks.push(await insight(ctx))
+    else if (w.type === 'insight') blocks.push(...await insights(ctx))
     else if (w.type === 'feed') blocks.push(await feedBlock(ctx, title, 8))
+    else if (w.type === 'trend') blocks.push(await trendBlock(ctx, title))
+    else if (w.type === 'reputation') { if (enabledModules(ctx).includes('score')) blocks.push(await scoreCard(ctx, label(ctx, w.title))) }
     else if (moduleAvailable(ctx.region, w.module)) {
       const block = await MODS[w.module].widgets[w.type](ctx, w)
       if (block && !(block.type === 'rows' && !block.rows.length)) blocks.push({ ...block, title, module: w.module })

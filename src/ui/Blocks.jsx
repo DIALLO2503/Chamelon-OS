@@ -82,7 +82,7 @@ function Insight({ block }) {
   const { openAction, setTab } = useApp()
   const { cta } = block
   return (
-    <div className={`insight ${block.type === 'notice' ? 'notice' : ''}`}>
+    <div className={`insight ${block.type === 'notice' || block.tone === 'warn' ? 'notice' : ''}`} role={block.tone === 'warn' ? 'alert' : undefined}>
       <Icon name={block.icon} size={22} />
       <div>
         <p>{block.text}</p>
@@ -169,6 +169,46 @@ function Bars({ block }) {
   )
 }
 
+// Six months of money received; the current month is highlighted and compared with the same days of last month.
+function Trend({ block }) {
+  const max = Math.max(1, ...block.bars.map(b => b.value)), bw = 30, gap = 14, H = 84
+  return (
+    <Section title={block.title}>
+      <div className="card chart trend">
+        <div className="trend-head">
+          <div><div className="muted">{block.caption}</div><b className="num trend-amount">{block.headline}</b></div>
+          {block.delta && <span className={`pill ${block.delta.tone}`}>{block.delta.text}</span>}
+        </div>
+        <svg viewBox={`0 0 ${block.bars.length * (bw + gap) - gap} ${H + 18}`} role="img" aria-label={`${block.title} : ${block.bars.map(b => `${b.label} ${b.display}`).join(', ')}`}>
+          {block.bars.map((b, i) => {
+            const h = Math.max(3, (b.value / max) * H)
+            return <g key={i}><title>{`${b.label} : ${b.display}`}</title><rect x={i * (bw + gap)} y={H - h} width={bw} height={h} rx="6" className={!b.value ? 'off' : b.current ? 'on' : 'past'} /><text x={i * (bw + gap) + bw / 2} y={H + 14} textAnchor="middle" className={b.current ? 'now' : ''}>{b.label}</text></g>
+          })}
+        </svg>
+        <div className="trend-kpis">{block.kpis.map(k => <div key={k.label}><span className="muted">{k.label}</span><b className={`num ${k.tone ?? ''}`}>{k.value}</b></div>)}</div>
+      </div>
+    </Section>
+  )
+}
+
+// The reputation at a glance on the home screen: value, level and progress to the next one.
+function ScoreCard({ block }) {
+  const { setTab } = useApp()
+  return (
+    <Section title={block.title}>
+      <button className="card scorecard" onClick={() => setTab(block.cta.module)}>
+        <span className="disc soft"><Icon name="gauge" /></span>
+        <div className="grow">
+          <div className="scorecard-top"><b className="num">{block.value}</b><span className="muted">/ 1000 · Niveau {block.level} · {block.name}</span></div>
+          <div className="bar"><i style={{ width: `${Math.round(block.pct * 100)}%` }} /></div>
+          <div className="muted">{block.next}</div>
+        </div>
+        <Icon name="chevron-right" size={18} />
+      </button>
+    </Section>
+  )
+}
+
 const Budget = ({ block }) => (
   <Section title={block.title}>
     <div className="card">
@@ -224,7 +264,7 @@ const Note = ({ block }) => (
   </Section>
 )
 
-const TYPES = { balance: Balance, actions: Actions, insight: Insight, notice: Insight, kpis: Kpis, rows: Rows, feed: Feed, bars: Bars, budget: Budget, score: Score, note: Note, zellij: Zellij, goal: Goal }
+const TYPES = { balance: Balance, actions: Actions, insight: Insight, notice: Insight, kpis: Kpis, rows: Rows, feed: Feed, bars: Bars, budget: Budget, score: Score, scorecard: ScoreCard, trend: Trend, note: Note, zellij: Zellij, goal: Goal }
 
 export default function Block({ block }) {
   const Component = TYPES[block.type]

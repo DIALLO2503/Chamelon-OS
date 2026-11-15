@@ -67,13 +67,13 @@ const shop = (label, hue = 20) => ({
   label, tagline: 'Commerce de quartier. Carnet de crédit clients et factures fournisseurs.', icon: 'store', hue,
   nav: ['creditbook', 'invoices', 'tontine'],
   actions: ['addCredit', 'recordIn', 'receive', 'paySupplier', 'send'],
-  home: [w('balance'), w('actions'), w('kpis', 'Carnet de crédit', { module: 'creditbook' }), w('rows', 'Crédits en cours', { module: 'creditbook' }), w('feed', 'Activité')],
+  home: [w('balance'), w('actions'), w('insight'), w('trend', 'Encaissements'), w('kpis', 'Carnet de crédit', { module: 'creditbook' }), w('rows', 'Crédits en cours', { module: 'creditbook' }), w('reputation', 'Votre {reputation}'), w('feed', 'Activité')],
 })
 const seller = tagline => ({
   label: 'Vendeuse en ligne', tagline, icon: 'shopping-bag', hue: 340,
   nav: ['orders', 'escrow', 'tontine'],
   actions: ['paymentLink', 'requestDeposit', 'recordIn', 'send', 'scan'],
-  home: [w('balance'), w('actions'), w('kpis', "Aujourd'hui", { module: 'orders' }), w('rows', 'À encaisser', { module: 'orders' }), w('feed', 'Activité')],
+  home: [w('balance'), w('actions'), w('insight'), w('kpis', "Aujourd'hui", { module: 'orders' }), w('trend', 'Ventes encaissées'), w('rows', 'À encaisser', { module: 'orders' }), w('reputation', 'Votre {reputation}'), w('feed', 'Activité')],
 })
 const parent = {
   label: 'Parent au pays', tagline: "Recevez l'argent de vos enfants à l'étranger, simplement.",
@@ -87,14 +87,14 @@ const artisan = (label, tagline) => ({
   label, tagline, icon: 'hammer', hue: 60, presentation: { contrast: 'high' },
   nav: ['jobs', 'escrow', 'tontine'],
   actions: ['newJob', 'payCrew', 'requestDeposit', 'recordIn', 'send', 'scan'],
-  home: [w('balance'), w('actions'), w('insight'), w('rows', 'Chantiers en cours', { module: 'jobs' }), w('rows', 'Acomptes {escrow}', { module: 'escrow' }), w('feed', 'Activité')],
+  home: [w('balance'), w('actions'), w('insight'), w('trend', 'Encaissements'), w('rows', 'Chantiers en cours', { module: 'jobs' }), w('rows', 'Acomptes {escrow}', { module: 'escrow' }), w('reputation', 'Votre {reputation}'), w('feed', 'Activité')],
 })
 const worker = {
   label: 'Ouvrier, journalier', tagline: 'Chantier, atelier ou usine. Chaque paie confirmée construit votre dossier, sans banque.',
   icon: 'hard-hat', hue: 100, presentation: { contrast: 'high' },
   nav: ['wallet', 'tontine', 'score'],
   actions: ['recordIn', 'setGoal', 'contribute', 'send'],
-  home: [w('balance'), w('actions'), w('goal', 'Objectif du mois', { module: 'wallet' }), w('insight'), w('feed', 'Paies et paiements')],
+  home: [w('balance'), w('actions'), w('goal', 'Objectif du mois', { module: 'wallet' }), w('insight'), w('trend', 'Paies reçues'), w('reputation', 'Votre {reputation}'), w('feed', 'Paies et paiements')],
 }
 const abroad = (label, tagline, icon, hue, last) => ({
   label, tagline, icon, hue,
@@ -132,7 +132,7 @@ export const REGIONS = {
         label: 'Chauffeur', tagline: 'Taxi, VTC ou moto Jakarta. Voyez ce qui reste après le carburant.', icon: 'car', hue: 255,
         nav: ['shifts', 'tontine', 'wallet'],
         actions: ['addTrip', 'addFuel', 'send', 'scan'],
-        home: [w('balance'), w('actions'), w('kpis', "Aujourd'hui", { module: 'shifts' }), w('bars', 'Cette semaine', { module: 'shifts' }), w('feed', 'Activité')],
+        home: [w('balance'), w('actions'), w('insight'), w('kpis', "Aujourd'hui", { module: 'shifts' }), w('bars', 'Cette semaine', { module: 'shifts' }), w('feed', 'Activité')],
       },
       agent: {
         label: 'Agent mobile money', tagline: 'Point de service agréé. Pilotez votre float et vos commissions.', icon: 'landmark', hue: 45,
@@ -192,7 +192,7 @@ export const REGIONS = {
         label: 'Commerçant import', tagline: 'Achats à Dubaï. Suivez chaque facture fournisseur et sécurisez le fret.', icon: 'ship', hue: 30,
         nav: ['invoices', 'escrow', 'remit'],
         actions: ['paySupplier', 'holdFunds', 'sendHome', 'scan'],
-        home: [w('balance'), w('actions'), w('kpis', 'Factures', { module: 'invoices' }), w('rows', 'À régler', { module: 'invoices' }), w('feed', 'Activité')],
+        home: [w('balance'), w('actions'), w('insight'), w('kpis', 'Factures', { module: 'invoices' }), w('trend', 'Entrées'), w('rows', 'À régler', { module: 'invoices' }), w('feed', 'Activité')],
       },
     },
   },
@@ -236,7 +236,7 @@ export function validateCatalog(mods) {
       for (const m of p.nav) check(r.modules.includes(m), `${rid}.${pid}: nav module ${m} not enabled in region`)
       for (const a of p.actions) check(ACTIONS[a], `${rid}.${pid}: unknown action ${a}`)
       for (const wd of p.home) {
-        if (['balance', 'actions', 'insight', 'feed'].includes(wd.type)) continue
+        if (['balance', 'actions', 'insight', 'feed', 'trend', 'reputation'].includes(wd.type)) continue
         check(mods[wd.module]?.widgets?.[wd.type], `${rid}.${pid}: widget ${wd.module}.${wd.type} not implemented`)
       }
     }

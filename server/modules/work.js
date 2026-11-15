@@ -100,6 +100,7 @@ export const float = {
     async kpis(ctx) { const k = await opsToday(ctx); return { type: 'kpis', title: "Aujourd'hui", items: [{ label: 'Opérations', value: String(k.n) }, { label: 'Volume', value: ctx.f(k.volume) }] } },
   },
   async insight(ctx) {
+    if (ctx.persona.restricted !== 'agent') return null // float exists region-wide, but only agents run it
     if (!ctx.hasRole('agent')) return { icon: 'clock', text: 'Votre demande d’agrément d’agent est en cours de vérification. Les opérations clients s’activeront après validation.', cta: { label: 'Voir', module: 'float' } }
     const k = await opsToday(ctx), balance = await balanceOf(ctx.client, (await ctx.wallet()).id)
     return k.deposits > balance ? { icon: 'arrow-left-right', text: `Votre float (${ctx.f(balance)}) est inférieur aux dépôts servis aujourd’hui (${ctx.f(k.deposits)}). Pensez à vous réapprovisionner.`, cta: { label: 'Approvisionner', module: 'wallet', action: 'topup' } } : null
@@ -206,6 +207,18 @@ export async function computeScore(client, user, party) {
   return { value, level, signals, penalty, tiles }
 }
 export const levelOf = async ctx => (await computeScore(ctx.client, ctx.user, ctx.party)).level
+
+// Compact version for the home screen: the value, the level and how far the next one is. Opens the full view.
+export async function scoreCard(ctx, title) {
+  const s = await computeScore(ctx.client, ctx.user, ctx.party)
+  const [floor, name] = LEVELS[s.level], next = LEVELS[s.level + 1]
+  return {
+    type: 'scorecard', title, value: s.value, name, level: s.level + 1,
+    pct: next ? (s.value - floor) / (next[0] - floor) : 1,
+    next: next ? `Encore ${next[0] - s.value} points pour « ${next[1]} »` : 'Niveau maximum atteint',
+    cta: { label: 'Voir le détail', module: 'score' },
+  }
+}
 
 /* ---------------- reputation: derived from kept commitments with distinct people, visible to the user only ---------------- */
 export const score = {
