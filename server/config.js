@@ -46,7 +46,8 @@ export const config = {
   databaseUrl: env.DATABASE_URL || (NEXUS_ENV === 'test' ? 'postgres://nexus:nexus@localhost:5432/nexus_test' : NEXUS_ENV === 'sandbox' ? 'postgres://nexus:nexus@localhost:5432/nexus' : undefined),
   jwtSecret: secret('JWT_SECRET', 'jwt-secret'),
   linkSecret: secret('LINK_SECRET', 'link-secret'),
-  publicUrl: (env.PUBLIC_URL || `http://localhost:${env.PORT || 3001}`).replace(/\/$/, ''),
+  // Links sent to people point here. RENDER_EXTERNAL_URL is set by Render for the online demo (render.yaml).
+  publicUrl: (env.PUBLIC_URL || env.RENDER_EXTERNAL_URL || `http://localhost:${env.PORT || 3001}`).replace(/\/$/, ''),
   trustProxy: env.TRUST_PROXY ? Number(env.TRUST_PROXY) : 0,
   uploadDir: env.UPLOAD_DIR || path.join(root, '.local', 'uploads'),
   // Payment rails for "held" custody: sandbox simulates a licensed partner; partner calls a real one over HTTP.

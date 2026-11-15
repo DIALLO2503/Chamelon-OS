@@ -119,6 +119,7 @@ All variables are read in `server/config.js` (plus `CUSTODY_<ID>` in `server/cat
 | [docs/operations.md](docs/operations.md) | Running a pilot, scheduler, runbooks |
 | [docs/partner-integration.md](docs/partner-integration.md) | Go-live checklist for a licensed partner |
 | [docs/pilot.md](docs/pilot.md) | Running the two-country pilot on one server, with phones as SMS gateways and no payment partner |
+| [docs/demo.md](docs/demo.md) | A public sandbox demo on Render in a few clicks (`render.yaml`), with the demo accounts |
 | [docs/testing.md](docs/testing.md) | What the 59 tests prove and how to add one |
 | [docs/glossary.md](docs/glossary.md) | Product and domain terms |
 
