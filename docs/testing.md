@@ -14,7 +14,7 @@ Related: [money.md](money.md), [partner-integration.md](partner-integration.md).
 - `server/test/helpers.js` sets `NEXUS_ENV=test` before importing anything, so tests use `postgres://nexus:nexus@localhost:5432/nexus_test` unless `DATABASE_URL` is set. Each file starts with `resetDb()`: **`DROP SCHEMA public CASCADE`**, then migrations. Never run tests with `DATABASE_URL` pointing at real data.
 - In `test`, rate limits are effectively off, OTP caps are the live ones (5 sends, 10 failures a day), logs are silent, and the sandbox partner does not auto-settle: tests settle explicitly.
 
-Expected result: `# tests 59`, `# pass 59` (58 and one skipped if the interface has not been built: the link-preview test reads `dist/index.html`).
+Expected result: `# tests 60`, `# pass 60` (59 and one skipped if the interface has not been built: the link-preview test reads `dist/index.html`).
 
 ## Helpers
 
