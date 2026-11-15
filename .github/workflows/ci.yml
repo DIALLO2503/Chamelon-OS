@@ -33,8 +33,9 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
-      - run: npm test
+      # Built first: the link-preview test reads the built page.
       - run: npm run build
+      - run: npm test
 
   image:
     runs-on: ubuntu-latest

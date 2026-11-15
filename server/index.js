@@ -14,7 +14,7 @@ import * as engine from './engine.js'
 import { publicRoutes } from './public.js'
 import { uploadRoutes, publicUploadRoutes } from './uploads.js'
 import { adminRoutes } from './admin.js'
-import { handleWebhook, startOutboxWorker } from './rails.js'
+import { handleWebhook, startOutboxWorker, resolveLink } from './rails.js'
 import { startScheduler } from './scheduler.js'
 
 const dist = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'dist')
@@ -60,6 +60,27 @@ app.use('/api', (_, res) => res.status(404).json({ error: 'Introuvable' }))
 
 if (fs.existsSync(dist)) {
   app.use(express.static(dist, { index: false }))
+  // Messaging apps fetch a shared link to draw its preview and do not run scripts: the title and description must be in
+  // the HTML itself. The text says what kind of request it is and nothing else: no name, no amount (previews are cached
+  // on the messaging app's servers). An unknown or expired link gets the generic page.
+  const shell = fs.readFileSync(path.join(dist, 'index.html'), 'utf8')
+  const PREVIEW = {
+    recorded: 'Un paiement à confirmer',
+    escrow: 'Une demande de paiement protégé',
+    job: 'Votre chantier : suivez et validez chaque étape',
+    order: 'Votre commande : payez et suivez la livraison',
+    tontine: 'Une invitation à rejoindre une tontine',
+    statement: 'Votre relevé de crédit chez votre commerçant',
+  }
+  const esc = s => s.replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c])
+  app.get('/l/:token', async (req, res) => {
+    const link = await resolveLink(pool, req.params.token).catch(() => null)
+    const title = PREVIEW[link?.kind] ?? 'Nexus'
+    const tags = [['og:site_name', 'Nexus'], ['og:title', title], ['og:description', 'Ouvrez ce lien pour répondre. Aucune application à installer.'],
+      ['og:image', `${config.publicUrl}/icon-512.png`], ['og:type', 'website']]
+      .map(([p, c]) => `<meta property="${p}" content="${esc(c)}" />`).join('\n    ')
+    res.type('html').set('Cache-Control', 'no-store').send(shell.replace('<title>Nexus</title>', `<title>${esc(title)}</title>\n    ${tags}`))
+  })
   app.use((req, res, next) => (req.method === 'GET' ? res.sendFile(path.join(dist, 'index.html')) : next()))
 }
 

@@ -31,6 +31,25 @@ services:
     volumes:
       - uploads:/data/uploads
 
+  # A dump of the database and an archive of the photos every night, kept 14 days in the "backups" volume.
+  # They are on the same server: copy them elsewhere too (docs/pilot.md).
+  backup:
+    image: postgres:16
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      PGHOST: db
+      PGUSER: nexus
+      PGDATABASE: nexus
+      PGPASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - ./backup.sh:/backup.sh:ro
+      - backups:/backups
+      - uploads:/uploads:ro
+    entrypoint: ["/bin/bash", "-c", "while true; do /bin/bash /backup.sh || echo 'backup failed'; sleep 86400; done"]
+
   caddy:
     image: caddy:2
     restart: unless-stopped
@@ -45,4 +64,5 @@ services:
 volumes:
   db:
   uploads:
+  backups:
   caddy:

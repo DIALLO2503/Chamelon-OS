@@ -152,6 +152,6 @@ Stated plainly.
 - A forgotten secret code can be replaced after a login code, with a 24-hour hold on money actions (above).
 - Photos are served again: with the default `UPLOAD_DIR` (`.local/uploads`) every `GET /api/uploads/:id` answered 404, because Express refuses a bare absolute path containing a dot-segment.
 
-**Not implemented:** sanctions/PEP screening, transaction monitoring and suspicious-activity reporting, partner statement reconciliation, catalog versioning, device binding, CSV export for regulators, backups, metrics and error tracking, i18n, link revocation UI.
+**Not implemented:** sanctions/PEP screening, transaction monitoring and suspicious-activity reporting, partner statement reconciliation, catalog versioning, device binding, CSV export for regulators, off-server backups, metrics and error tracking, i18n, link revocation UI.
 
 **Non-goals for this codebase:** Nexus holding customer funds itself; credit or lending; card payments.

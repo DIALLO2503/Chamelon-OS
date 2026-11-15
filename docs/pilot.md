@@ -61,11 +61,21 @@ The admin then signs in with their number, receives a login code, taps **Code se
 
 ## 4. Backups
 
-Everything lives in two Docker volumes: `db` (PostgreSQL) and `uploads` (photos). At minimum, a nightly dump copied off the server:
+Everything lives in two Docker volumes: `db` (PostgreSQL) and `uploads` (photos). The `backup` service writes a database dump and a photo archive every night into a third volume, `backups`, and keeps 14 days (`deploy/backup.sh`).
+
+Those backups sit on the same server, so they do not survive losing it. Copy them elsewhere regularly, for example to your own computer:
 
 ```bash
-docker compose -f deploy/docker-compose.yml --env-file deploy/.env exec -T db pg_dump -U nexus nexus | gzip > nexus-$(date +%F).sql.gz
+docker compose -f deploy/docker-compose.yml --env-file deploy/.env cp backup:/backups ./nexus-backups
 ```
+
+To restore a dump into an empty database:
+
+```bash
+gunzip -c nexus-backups/db-2026-11-15.sql.gz | docker compose -f deploy/docker-compose.yml --env-file deploy/.env exec -T db psql -U nexus nexus
+```
+
+The backup script was run against a local database and its dump restored with matching row counts; the `backup` container itself was not run.
 
 ## What to watch
 
@@ -76,7 +86,9 @@ Console → **Pilote** (`GET /api/admin/funnel?days=30`):
 
 The second table is the pilot's main result. The model assumes that someone who receives a link acts on it without installing anything, and that some of them then sign up. If few open, the problem is delivery or trust in the message; if many open and few act, it is the page.
 
-Opening is counted when the page loads, so a link preview fetched by a messaging app can count as an open; "acted" is exact.
+Opening is counted when the page runs in a browser. The preview a messaging app draws for a shared link does not count: it reads the page without running it.
+
+That preview shows the Nexus icon and one line saying what the link is ("Votre chantier : suivez et validez chaque étape"), never a name or an amount.
 
 ## Before real users
 

@@ -7,13 +7,13 @@ Related: [money.md](money.md), [partner-integration.md](partner-integration.md).
 - Runner: Node's built-in `node:test`, no framework. `npm test` runs `node --test --test-concurrency=1 server/test/money.test.js server/test/flows.test.js server/test/fixes.test.js`.
 - `server/test/money.test.js` (14 tests): ledger, quotes, idempotency, limits, corridors, webhooks, concurrency, catalog.
 - `server/test/flows.test.js` (13 tests): end-to-end journeys, several over real HTTP (the Express `app` on a random port) including public links.
-- `server/test/fixes.test.js` (11 tests): regression tests for the issues fixed after the first documentation pass ([security.md](security.md#known-gaps-and-non-goals)).
+- `server/test/fixes.test.js` (12 tests): regression tests for the issues fixed after the first documentation pass ([security.md](security.md#known-gaps-and-non-goals)).
 - `server/test/messaging.test.js` (5 tests): SMS login codes and WhatsApp/SMS notifications against a local HTTP stand-in for Twilio's Messages API (request shape, credentials, provider failure, SMS fallback, outbox retry).
 - `server/test/pilot.test.js` (6 tests): the link funnel, and the pilot configuration: sign-up limited to two countries, one SMS gateway phone per country, the first admin created from the command line, live boot without a payment partner.
 - `server/test/helpers.js` sets `NEXUS_ENV=test` before importing anything, so tests use `postgres://nexus:nexus@localhost:5432/nexus_test` unless `DATABASE_URL` is set. Each file starts with `resetDb()`: **`DROP SCHEMA public CASCADE`**, then migrations. Never run tests with `DATABASE_URL` pointing at real data.
 - In `test`, rate limits are effectively off, OTP caps are the live ones (5 sends, 10 failures a day), logs are silent, and the sandbox partner does not auto-settle: tests settle explicitly.
 
-Expected result: `# tests 49`, `# pass 49`.
+Expected result: `# tests 50`, `# pass 50` (49 and one skipped if the interface has not been built: the link-preview test reads `dist/index.html`).
 
 ## Helpers
 
