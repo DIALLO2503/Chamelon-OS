@@ -1,5 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useState } from 'react'
-import { api, session } from './api.js'
+import { api, session, download } from './api.js'
 import Auth from './Auth.jsx'
 import Icon from './ui/Icon.jsx'
 import Block from './ui/Blocks.jsx'
@@ -42,6 +42,29 @@ function Screen({ path, head }) {
 
 const KYC = ['Numéro vérifié', 'Identité vérifiée', 'Vérification renforcée']
 
+// The person's rights over their data: a copy to keep, and a request to close the account (handled by the team).
+function DataRights() {
+  const [state, setState] = useState({ busy: false, note: '', error: '', confirm: false })
+  const run = fn => async () => {
+    setState(s => ({ ...s, busy: true, error: '', note: '' }))
+    try { setState({ busy: false, error: '', note: (await fn()) ?? '', confirm: false }) } catch (e) { setState({ busy: false, error: e.message, note: '', confirm: false }) }
+  }
+  return (
+    <section className="sec">
+      <h2>Vos données</h2>
+      <div className="card account rights">
+        <p className="muted">Vous pouvez garder une copie de tout ce que Nexus conserve sur vous, ou demander la fermeture de votre compte. <a href="/legal.html" target="_blank" rel="noopener">Conditions et confidentialité</a></p>
+        <button className="chip-btn" disabled={state.busy} onClick={run(() => download('/me/export', 'mes-donnees-nexus.json').then(() => 'Fichier téléchargé.'))}><Icon name="download" size={16} />Télécharger mes données</button>
+        {state.confirm
+          ? <><button className="chip-btn" disabled={state.busy} onClick={run(async () => (await api('/me/closure', { body: {} })).message)}>Confirmer la demande</button><button className="chip-btn" onClick={() => setState(s => ({ ...s, confirm: false }))}>Annuler</button></>
+          : <button className="chip-btn" disabled={state.busy} onClick={() => setState(s => ({ ...s, confirm: true, note: '', error: '' }))}>Demander la fermeture du compte</button>}
+        {state.note && <p className="info" role="status">{state.note}</p>}
+        {state.error && <p className="error" role="alert">{state.error}</p>}
+      </div>
+    </section>
+  )
+}
+
 function Services({ openAdmin }) {
   const { me, setTab, logout } = useApp()
   const { user, experience } = me
@@ -57,6 +80,7 @@ function Services({ openAdmin }) {
         <div><strong>{user.name}</strong><div className="muted">{user.phone} · {KYC[user.kycLevel]}</div></div>
         <button className="chip-btn" onClick={logout}><Icon name="log-out" size={16} />Se déconnecter</button>
       </div>
+      <DataRights />
       {user.isAdmin && <button className="cta quiet" onClick={openAdmin}><Icon name="shield-check" size={18} /> Console d’administration</button>}
     </div>
   )

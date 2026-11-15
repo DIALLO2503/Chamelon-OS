@@ -35,6 +35,17 @@ async function request(path, { body, idem, retry = true, raw, query } = {}) {
   return data
 }
 
+// Fetches a file from the API (which needs the bearer token, so a plain link cannot) and hands it to the browser to save.
+export async function download(path, fallbackName) {
+  const res = await fetch(`/api${path}`, { headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : {}, credentials: 'same-origin' })
+  if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || 'Téléchargement impossible')
+  const name = res.headers.get('Content-Disposition')?.match(/filename="([^"]+)"/)?.[1] ?? fallbackName
+  const url = URL.createObjectURL(await res.blob())
+  const a = Object.assign(document.createElement('a'), { href: url, download: name })
+  document.body.append(a); a.click(); a.remove()
+  setTimeout(() => URL.revokeObjectURL(url), 10_000)
+}
+
 // api('/path') → GET; api('/path', { body }) → POST with an idempotency key (pass idem to reuse one across retries).
 export const api = (path, opts) => request(path, opts)
 

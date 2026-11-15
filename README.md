@@ -37,7 +37,7 @@ npm run seed                     # migrates, then creates 19 demo accounts (PIN 
 npm run build                    # builds the PWA into dist/
 npm run server                   # http://localhost:3001 (serves dist/ and /api)
 
-# 3. Tests (50, end to end, against nexus_test; the schema is dropped and recreated)
+# 3. Tests (53, end to end, against nexus_test; the schema is dropped and recreated)
 npm test
 ```
 
@@ -92,7 +92,7 @@ All variables are read in `server/config.js` (plus `CUSTODY_<ID>` in `server/cat
 | `SIGNUP_REGIONS` | all countries | Comma-separated country ids (`MA,GN`) where sign-up is offered. Existing accounts elsewhere keep working. |
 | `PARTNER_BASE_URL`, `PARTNER_API_KEY`, `PARTNER_WEBHOOK_SECRET` | webhook secret `sandbox-webhook-secret` outside live | Partner API and webhook HMAC secret. All three required in live. |
 | `SMS_PROVIDER` | none | `smsgate` (Android phones as SMS gateways) or `twilio`. Required in live. |
-| `SMSGATE_<ID>_USER`, `SMSGATE_<ID>_PASSWORD`, `SMSGATE_USER`, `SMSGATE_PASSWORD` | none | With `smsgate`: the credentials of the phone that sends for country `<ID>`, and optionally of a default phone for every other number. `SMSGATE_BASE_URL` overrides the relay. |
+| `SMSGATE_<ID>_USER`, `SMSGATE_<ID>_PASSWORD`, `SMSGATE_USER`, `SMSGATE_PASSWORD` | none | With `smsgate`: the credentials of the phone that sends for country `<ID>`, and optionally of a default phone for every other number. `SMSGATE_BASE_URL` overrides the relay; `SMSGATE_<ID>_URL` points one country at a phone reachable directly (the app's local mode). |
 | `SMS_API_KEY`, `TWILIO_ACCOUNT_SID` | none | With `twilio`: `SMS_API_KEY` is the auth token. When set outside live, login codes are sent by SMS as well as shown on screen. |
 | `SMS_FROM` or `TWILIO_MESSAGING_SERVICE_SID` | none | SMS sender: a number or alphanumeric ID, or a messaging service that picks the sender per country. One is required with `SMS_PROVIDER`. |
 | `NOTIFIER` | `log` (in live: `whatsapp` with Twilio, else `sms`) | `log` writes messages to the log (refused in live). `sms` sends every message by SMS. `whatsapp` sends approved templates on WhatsApp and the rest by SMS. |
@@ -117,7 +117,7 @@ All variables are read in `server/config.js` (plus `CUSTODY_<ID>` in `server/cat
 | [docs/operations.md](docs/operations.md) | Running a pilot, scheduler, runbooks |
 | [docs/partner-integration.md](docs/partner-integration.md) | Go-live checklist for a licensed partner |
 | [docs/pilot.md](docs/pilot.md) | Running the two-country pilot on one server, with phones as SMS gateways and no payment partner |
-| [docs/testing.md](docs/testing.md) | What the 50 tests prove and how to add one |
+| [docs/testing.md](docs/testing.md) | What the 53 tests prove and how to add one |
 | [docs/glossary.md](docs/glossary.md) | Product and domain terms |
 
 ## Layout

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
-import { api, imageUrl } from '../api.js'
+import { api, imageUrl, download } from '../api.js'
 import Icon from '../ui/Icon.jsx'
 
 const TABS = [['overview', 'Vue d’ensemble'], ['pilot', 'Pilote'], ['users', 'Utilisateurs'], ['disputes', 'Litiges'], ['adjustments', 'Ajustements'], ['ops', 'Opérations']]
@@ -314,6 +314,47 @@ function Adjustments() {
 }
 
 /* ---------------- operations ---------------- */
+function LinkRevoke() {
+  const [phone, setPhone] = useState('')
+  const [reason, setReason] = useState('')
+  const [done, setDone] = useState('')
+  return (
+    <section className="sec">
+      <h2>Couper les liens d’un numéro</h2>
+      <p className="muted">À utiliser quand un lien a été transmis à la mauvaise personne. Tous les liens encore valides envoyés à ce numéro cessent de fonctionner ; de nouveaux liens peuvent être renvoyés depuis l’application.</p>
+      <div className="card adm-form">
+        <Field label="Numéro avec indicatif" id="adm-revoke-phone"><input id="adm-revoke-phone" type="tel" placeholder="+212…" value={phone} onChange={e => setPhone(e.target.value)} /></Field>
+        <Field label="Motif (obligatoire)" id="adm-revoke-reason"><input id="adm-revoke-reason" value={reason} onChange={e => setReason(e.target.value)} /></Field>
+        <ActionButton label="Couper les liens" confirm tone="bad" disabled={!phone.trim() || !reason.trim()}
+          run={async () => setDone(`${(await api('/admin/links/revoke', { body: { phone: phone.trim(), reason } })).revoked} lien(s) coupé(s).`)} />
+        {done && <p className="info" role="status">{done}</p>}
+      </div>
+    </section>
+  )
+}
+
+const EXPORT_SETS = [['users', 'Comptes'], ['recorded_payments', 'Paiements signalés'], ['ledger', 'Grand livre'], ['disputes', 'Litiges'], ['audit', 'Journal d’audit']]
+function Exports() {
+  const [from, setFrom] = useState('')
+  const [to, setTo] = useState('')
+  const [error, setError] = useState('')
+  const get = set => download(`/admin/export/${set}?${new URLSearchParams({ ...(from && { from }), ...(to && { to }) })}`, `nexus-${set}.csv`).then(() => setError(''), e => setError(e.message))
+  return (
+    <section className="sec">
+      <h2>Exports CSV</h2>
+      <p className="muted">Pour la comptabilité, un partenaire ou une autorité. Sans dates, tout l’historique. Chaque export est inscrit au journal d’audit.</p>
+      <div className="card adm-form">
+        <div className="adm-search-row">
+          <Field label="Du" id="adm-exp-from"><input id="adm-exp-from" type="date" value={from} onChange={e => setFrom(e.target.value)} /></Field>
+          <Field label="Au (inclus)" id="adm-exp-to"><input id="adm-exp-to" type="date" value={to} onChange={e => setTo(e.target.value)} /></Field>
+        </div>
+        <div className="adm-search-row">{EXPORT_SETS.map(([set, label]) => <button key={set} className="chip-btn" onClick={() => get(set)}>{label}</button>)}</div>
+        <Err msg={error} />
+      </div>
+    </section>
+  )
+}
+
 function Ops() {
   const jobs = useLoad('/admin/outbox?status=failed')
   const [who, setWho] = useState('')
@@ -335,6 +376,8 @@ function Ops() {
           ))}
         </div>
       </section>
+      <LinkRevoke />
+      <Exports />
       <section className="sec">
         <h2>Journal d’audit</h2>
         <form className="adm-search-row" onSubmit={e => { e.preventDefault(); setFilter({ who, action }) }}>

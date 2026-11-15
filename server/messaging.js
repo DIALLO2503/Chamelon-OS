@@ -36,7 +36,7 @@ async function smsgateSend(phone, text) {
   if (!gw) throw new Error(`No SMS gateway phone configured for ${region ?? 'this country'}`)
   let res
   try {
-    res = await fetch(`${config.smsgate.baseUrl}/message`, {
+    res = await fetch(`${gw.url ?? config.smsgate.baseUrl}/message`, {
       method: 'POST',
       headers: { Authorization: `Basic ${Buffer.from(`${gw.user}:${gw.password}`).toString('base64')}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({ textMessage: { text }, phoneNumbers: [phone] }),

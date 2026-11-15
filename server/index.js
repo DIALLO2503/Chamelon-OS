@@ -5,7 +5,8 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { config } from './config.js'
-import { pool, migrate, all } from './db.js'
+import { pool, migrate, all, one, tx } from './db.js'
+import { audit } from './context.js'
 import { AppError } from './core.js'
 import { listRegions, REGIONS } from './catalog.js'
 import { log } from './log.js'
@@ -48,6 +49,38 @@ const api = express.Router()
 api.use(requireAuth)
 const ctxArgs = req => ({ idem: req.get('Idempotency-Key') ?? null, ip: req.ip })
 api.get('/me', async (req, res) => res.json(await engine.me(req.userId)))
+// A person's own data, as a file they can keep (the right of access), and a request to close the account.
+api.get('/me/export', limit(5, req => req.userId), async (req, res) => {
+  const user = await one(pool, 'SELECT id, phone, name, region, persona, kyc_level, created_at, terms_version, terms_accepted_at FROM users WHERE id=$1', [req.userId])
+  const party = await one(pool, 'SELECT id FROM parties WHERE user_id=$1', [req.userId])
+  const mine = (sql, args = [party.id]) => all(pool, sql, args)
+  const data = {
+    exportedAt: new Date().toISOString(), account: user,
+    recordedPayments: await mine(`SELECT created_at, confirmed_at, status, amount, currency, purpose, CASE WHEN payer_party=$1 THEN 'paid' ELSE 'received' END AS direction FROM recorded_payments WHERE payer_party=$1 OR payee_party=$1 ORDER BY created_at`),
+    jobs: await mine(`SELECT j.title, j.currency, j.mode, j.created_at, CASE WHEN j.artisan_party=$1 THEN 'artisan' ELSE 'client' END AS role,
+      (SELECT json_agg(json_build_object('position', s.position, 'title', s.title, 'amount', s.amount, 'status', s.status) ORDER BY s.position) FROM job_stages s WHERE s.job_id=j.id) AS stages
+      FROM jobs j WHERE j.artisan_party=$1 OR j.client_party=$1 ORDER BY j.created_at`),
+    orders: await mine(`SELECT item, amount, currency, status, mode, created_at, CASE WHEN seller_id=$2 THEN 'seller' ELSE 'buyer' END AS role FROM orders WHERE seller_id=$2 OR buyer_party=$1 ORDER BY created_at`, [party.id, req.userId]),
+    protectedPayments: await mine(`SELECT title, amount, currency, status, mode, created_at, CASE WHEN payer_party=$1 THEN 'payer' ELSE 'payee' END AS role FROM escrows WHERE payer_party=$1 OR payee_party=$1 ORDER BY created_at`),
+    tontines: await mine(`SELECT t.name, t.amount, t.currency, t.frequency, t.status, m.position, m.accepted_at FROM tontine_members m JOIN tontines t ON t.id=m.tontine_id WHERE m.party_id=$1 ORDER BY t.created_at`),
+    messages: await mine(`SELECT created_at, text FROM notifications WHERE user_id=$1 ORDER BY created_at`, [req.userId]),
+    activity: await mine(`SELECT created_at, action FROM audit_events WHERE actor_type='user' AND actor_id=$1 ORDER BY id`, [req.userId]),
+  }
+  await audit(pool, { actorId: req.userId, action: 'data.export', objectType: 'user', objectId: req.userId, ip: req.ip })
+  res.set('Content-Disposition', 'attachment; filename="mes-donnees-nexus.json"').json(data)
+})
+api.post('/me/closure', limit(5, req => req.userId), async (req, res) => {
+  await tx(async c => {
+    const u = await one(c, 'SELECT * FROM users WHERE id=$1 FOR UPDATE', [req.userId])
+    if (u.closure_requested_at) return
+    await c.query('UPDATE users SET closure_requested_at=now() WHERE id=$1', [u.id])
+    await audit(c, { actorId: u.id, action: 'closure.request', objectType: 'user', objectId: u.id, ip: req.ip })
+    for (const a of await all(c, `SELECT user_id FROM roles WHERE role='admin' AND status='active'`)) {
+      await c.query(`INSERT INTO notifications (user_id, channel, template, text, status) VALUES ($1,'inapp','alert.closure',$2,'delivered')`, [a.user_id, `${u.name} (${u.phone}) demande la fermeture de son compte.`])
+    }
+  })
+  res.json({ ok: true, message: 'Demande enregistrée. Notre équipe vous contacte avant de fermer le compte.' })
+})
 api.get('/home', async (req, res) => res.json(await engine.home(req.userId)))
 api.get('/modules/:id', async (req, res) => res.json(await engine.moduleView(req.userId, req.params.id)))
 api.get('/modules/:id/actions/:action', async (req, res) => res.json(await engine.actionForm(req.userId, req.params.id, req.params.action, req.query.row ?? null)))

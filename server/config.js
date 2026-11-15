@@ -35,7 +35,8 @@ function gateway(prefix) {
   const user = env[`${prefix}_USER`], password = env[`${prefix}_PASSWORD`]
   if (!user && !password) return null
   if (!user || !password) throw new Error(`${prefix}_USER and ${prefix}_PASSWORD must be set together`)
-  return { user, password }
+  // A phone on the server's own network can be reached directly (the app's local mode), so its codes never leave it.
+  return { user, password, url: env[`${prefix}_URL`]?.replace(/\/$/, '') }
 }
 
 export const config = {

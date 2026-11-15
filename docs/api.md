@@ -62,6 +62,8 @@ Related: [architecture.md](architecture.md#request-lifecycle), [security.md](sec
 | Method, path | Body / query | Response |
 |---|---|---|
 | `GET /api/me` | | `{ user: { id, name, phone, region, persona, kycLevel, pendingRoles, isAdmin }, experience: { region, persona: { id, label, icon, hue, presentation }, nav, services, actions }, unread }` |
+| `GET /api/me/export` | | A JSON file of everything Nexus holds about the caller: account, recorded payments, jobs, orders, protected payments, tontines, messages, activity. |
+| `POST /api/me/closure` | `{}` | `{ ok, message }`: records a request to close the account and alerts the admins. Nothing is deleted. |
 | `GET /api/home` | | `{ blocks: [...] }` |
 | `GET /api/modules/:id` | | `{ id, label, blocks, actions: [{ id, label, icon }] }` |
 | `GET /api/modules/:id/actions/:action` | `?row=<id>` | `{ title, info?, fields: [...], blocked?, needsReview }` |
@@ -139,6 +141,8 @@ Actions per kind (OTP column: whether a code is needed):
 | Method, path | Body / query | Effect |
 |---|---|---|
 | `GET /overview` | | `{ counts: { users, pending_roles, disputes, failed_jobs, adjustments, frozen }, reconciliation: { ok, mismatches }, safeguarding: [{ currency, owed, held_at_partner, ok, owedText, heldText }] }` |
+| `POST /links/revoke` | `{ phone, reason }` | `{ revoked }`: revokes every active link sent to that number. |
+| `GET /export/:set?from=YYYY-MM-DD&to=YYYY-MM-DD` | | A CSV file. `set`: `users`, `recorded_payments`, `ledger`, `disputes`, `audit`. |
 | `GET /funnel?days=30` | | `{ days, users: [{ region, users, new_users, active_7d }], links: [{ region, kind, sent, opened, acted, signed_up, openRate, actRate, signupRate }] }`: accounts per country and, per recipient country and link type, how many invited people opened, acted and signed up. |
 | `GET /users` | `?q=` name or phone (ILIKE) | `{ users: [{ id, name, phone, region, persona, kyc_level, frozen, created_at, roles }] }` (50) |
 | `GET /users/:id` | | `{ user (no pin_hash), accounts, roles, events }` |

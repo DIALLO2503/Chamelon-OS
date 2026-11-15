@@ -237,3 +237,67 @@ test('a shared link carries a preview that says what it is, without names or amo
   const unknown = await (await fetch(`${origin}/l/not-a-real-token`)).text()
   assert.match(unknown, /<meta property="og:title" content="Nexus" \/>/)
 })
+
+const bearerFor = async u => {
+  const jwt = (await import('jsonwebtoken')).default, { config } = await import('../config.js')
+  const sid = (await one(pool, `INSERT INTO sessions (id, user_id, refresh_hash) VALUES (gen_random_uuid(), $1, $2) RETURNING id`, [u.id, idem()])).id
+  return { Authorization: `Bearer ${jwt.sign({ sub: u.id, sid, typ: 'access' }, config.jwtSecret, { expiresIn: '5m' })}` }
+}
+
+test('an admin can cut every link sent to a number; the cut is audited', async () => {
+  const artisan = await user('MA', 'maallem'), admin = await user('FR', 'sender', { roles: ['admin'] })
+  const clientPhone = phone('MA')
+  await act(artisan, 'jobs', 'create', { title: 'Hammam', phone: clientPhone, name: 'Client Égaré', stage1: 'Tadelakt', amount1: '900' })
+  const job = await one(pool, 'SELECT * FROM jobs WHERE title=$1', ['Hammam'])
+  const token = await linkFor('job', job.id, (await partyByPhone(clientPhone)).id)
+  assert.equal((await fetch(`${base}/public/${token}`)).status, 200)
+
+  assert.equal((await raw('/admin/links/revoke', JSON.stringify({ phone: clientPhone, reason: 'x' }), await bearerFor(artisan))).status, 403, 'not for ordinary users')
+  assert.equal((await raw('/admin/links/revoke', JSON.stringify({ phone: clientPhone }), await bearerFor(admin))).status, 400, 'a reason is required')
+  const r = await raw('/admin/links/revoke', JSON.stringify({ phone: clientPhone, reason: 'Lien transféré par erreur' }), await bearerFor(admin))
+  assert.equal(r.status, 200)
+  assert.ok(r.revoked >= 2, 'the link sent at creation and the one re-sent')
+  assert.equal((await fetch(`${base}/public/${token}`)).status, 404)
+  assert.ok(await one(pool, `SELECT 1 FROM audit_events WHERE action='links.revoke' AND actor_id=$1`, [admin.id]))
+  assert.equal((await fetch(`${base}/public/${await linkFor('job', job.id, (await partyByPhone(clientPhone)).id)}`)).status, 200, 'a fresh link works')
+})
+
+test('admin exports are CSV files, limited to admins, audited, and safe to open in a spreadsheet', async () => {
+  const admin = await user('FR', 'sender', { roles: ['admin'] }), seller = await user('MA', 'seller')
+  await pool.query(`UPDATE users SET name='=HYPERLINK("http://evil.test";"Cliquez")' WHERE id=$1`, [seller.id])
+  const get = async (path, u) => { const r = await fetch(base + path, { headers: await bearerFor(u) }); return { status: r.status, type: r.headers.get('content-type'), disposition: r.headers.get('content-disposition'), text: await r.text() } }
+  assert.equal((await get('/admin/export/users', seller)).status, 403)
+  assert.equal((await get('/admin/export/passwords', admin)).status, 404)
+  const users = await get('/admin/export/users', admin)
+  assert.equal(users.status, 200)
+  assert.match(users.type, /text\/csv/)
+  assert.match(users.disposition, /attachment; filename="nexus-users-\d{4}-\d{2}-\d{2}\.csv"/)
+  const lines = users.text.replace(/^﻿/, '').trim().split('\r\n')
+  assert.match(lines[0], /^id,phone,name,region,persona,kyc_level,frozen,created_at/)
+  assert.ok(!users.text.includes('pin_hash'), 'no secret column')
+  const row = lines.find(l => l.includes(seller.phone))
+  assert.ok(row.includes(`"'=HYPERLINK(""http://evil.test"";""Cliquez"")"`), 'a cell starting with = is neutralised and quoted')
+  assert.equal((await get('/admin/export/users?from=2000-01-01&to=2000-12-31', admin)).text.replace(/^﻿/, ''), '', 'the date range is applied')
+  assert.equal((await get('/admin/export/ledger', admin)).status, 200)
+  assert.equal((await one(pool, `SELECT count(*)::int AS n FROM audit_events WHERE action='export' AND actor_id=$1`, [admin.id])).n, 3)
+})
+
+test('a person can download their own data and ask for their account to be closed', async () => {
+  const artisan = await user('MA', 'maallem'), other = await user('MA', 'maallem'), admin = await user('FR', 'sender', { roles: ['admin'] })
+  await act(artisan, 'jobs', 'create', { title: 'Mon chantier à moi', phone: phone('MA'), name: 'Cliente', stage1: 'Peinture', amount1: '400' })
+  await act(other, 'jobs', 'create', { title: 'Chantier d’un autre', phone: phone('MA'), name: 'Client', stage1: 'Carrelage', amount1: '800' })
+  const r = await fetch(`${base}/me/export`, { headers: await bearerFor(artisan) })
+  assert.equal(r.status, 200)
+  const data = await r.json()
+  assert.equal(data.account.phone, artisan.phone)
+  assert.deepEqual(data.jobs.map(j => [j.title, j.role, j.stages[0].title]), [['Mon chantier à moi', 'artisan', 'Peinture']])
+  const text = JSON.stringify(data)
+  assert.ok(!text.includes('Chantier d’un autre') && !text.includes('pin_hash'), 'nothing of anyone else, no secret')
+  assert.equal((await fetch(`${base}/me/export`)).status, 401)
+
+  const closure = await raw('/me/closure', '{}', await bearerFor(artisan))
+  assert.equal(closure.status, 200)
+  await raw('/me/closure', '{}', await bearerFor(artisan))
+  assert.ok((await one(pool, 'SELECT closure_requested_at FROM users WHERE id=$1', [artisan.id])).closure_requested_at)
+  assert.equal((await one(pool, `SELECT count(*)::int AS n FROM notifications WHERE user_id=$1 AND template='alert.closure'`, [admin.id])).n, 1, 'admins are told once')
+})

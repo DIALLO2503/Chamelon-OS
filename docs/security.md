@@ -151,8 +151,11 @@ Stated plainly.
 - Either side of an open dispute can add evidence (a statement of up to 500 characters, a photo, or both; 10 pieces per side): action `evidence` on the escrow, job or order in the app, and on the public link behind a login code. A photo must have been uploaded by the same person. Evidence closes when the dispute is resolved.
 - A forgotten secret code can be replaced after a login code, with a 24-hour hold on money actions (above).
 - Sign-up requires accepting the terms (`public/legal.html`, a draft pending legal review); the accepted version and time are stored on the account (`users.terms_version`, `terms_accepted_at`).
+- An admin can cut every active link sent to a phone number (`POST /api/admin/links/revoke`, reason required, audited).
+- Admin CSV exports (`GET /api/admin/export/<users|recorded_payments|ledger|disputes|audit>?from&to`): audited, no secret columns, cells that a spreadsheet would run as a formula are neutralised.
+- A person can download their own data (`GET /api/me/export`) and ask for their account to be closed (`POST /api/me/closure`, which alerts the admins).
 - Photos are served again: with the default `UPLOAD_DIR` (`.local/uploads`) every `GET /api/uploads/:id` answered 404, because Express refuses a bare absolute path containing a dot-segment.
 
-**Not implemented:** sanctions/PEP screening, transaction monitoring and suspicious-activity reporting, partner statement reconciliation, catalog versioning, device binding, CSV export for regulators, off-server backups, metrics and error tracking, i18n, link revocation UI.
+**Not implemented:** sanctions/PEP screening, transaction monitoring and suspicious-activity reporting, partner statement reconciliation, catalog versioning, device binding, off-server backups, metrics and error tracking, i18n, account deletion (a closure request is recorded and handled by hand).
 
 **Non-goals for this codebase:** Nexus holding customer funds itself; credit or lending; card payments.

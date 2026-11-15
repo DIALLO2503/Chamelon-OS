@@ -30,6 +30,7 @@ Limits to know:
 - A code is "sent" for Nexus when the relay accepts it. If the phone is off, has no credit or no signal, the message waits and the person receives nothing: nobody can sign in from that country until it is back. Check the phones daily.
 - Operators may block a SIM that sends many automated messages. This holds for a pilot of tens to a few hundred users, not beyond.
 - Messages pass through the gateway project's relay server (`api.sms-gate.app`), which therefore sees phone numbers and login codes. The project documents end-to-end encryption and a self-hosted relay; neither is set up here.
+- A phone on the same network as the server can be reached directly instead of through the relay: turn on the app's Local Server and set `SMSGATE_<ID>_URL=http://<phone address>:8080` with the local username and password. Its codes then never leave your network.
 - WhatsApp is not automated in this setup. Users share their links through their own WhatsApp from the app's share button, which is free and needs nothing.
 
 ## 2. The server

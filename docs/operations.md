@@ -112,6 +112,14 @@ Never edit `accounts` or `postings`. Admin A `POST /api/admin/adjustments { user
 3. Console → user → "Valider l'agrément d'agent" (`POST /api/admin/users/:id/roles/agent { status: 'active' }`). The agent is notified.
 4. Revoke with `status: 'revoked'`. Watch `cash_ops.flagged`.
 
+### Runbook: a link reached the wrong person
+
+Console → Opérations → "Couper les liens d'un numéro", with a reason. Every active link sent to that number stops working; the user re-sends a fresh one from the app. Acting on a link always required a code sent to the right phone, so a forwarded link exposed what the page shows, not the ability to act.
+
+### Runbook: account closure request
+
+The person asks from Services → "Vos données"; admins receive an in-app alert and `users.closure_requested_at` is set (also in the users export). Contact the person, check nothing is pending (open job stage, dispute, tontine round), then freeze the account. Records that the other party also relies on (confirmed payments, disputes) are kept. Erasing the remaining personal data is a manual database operation: **no automated deletion exists**.
+
 ### Runbook: rotating secrets
 
 | Secret | Effect of rotation |
