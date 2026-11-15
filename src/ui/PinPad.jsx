@@ -19,7 +19,7 @@ export default function PinPad({ label, onSubmit, busy, error, length = 4 }) {
       <div className="pin-dots" aria-label={`${pin.length} chiffres saisis`}>{Array.from({ length }, (_, i) => <span key={i} className={i < pin.length ? 'on' : ''} />)}</div>
       {error && <p className="error" role="alert">{error}</p>}
       <div className="pad">
-        {KEYS.map((k, i) => k === '' ? <span key={i} /> : (
+        {KEYS.map(k => k === '' ? <span key="spacer" /> : (
           <button type="button" key={k} disabled={busy} aria-label={k === 'del' ? 'Effacer' : k} onClick={() => press(k)}>{k === 'del' ? <Icon name="delete" size={24} /> : k}</button>
         ))}
       </div>
