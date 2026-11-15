@@ -19,6 +19,7 @@ export default function Auth({ onDone }) {
   const [personaId, setPersonaId] = useState('')
   const [name, setName] = useState('')
   const [firstPin, setFirstPin] = useState('')
+  const [terms, setTerms] = useState(false)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const region = regions.find(r => r.id === regionId)
@@ -55,7 +56,7 @@ export default function Auth({ onDone }) {
   })
   const register = pin => run(async () => {
     if (pin !== firstPin) { setFirstPin(''); setStep('pin1'); throw new Error('Les deux codes ne sont pas identiques. Recommencez.') }
-    finish((await api('/auth/register', { body: { signupToken: tokens.signup, name: name.trim(), region: regionId, persona: personaId, pin } })).accessToken)
+    finish((await api('/auth/register', { body: { signupToken: tokens.signup, name: name.trim(), region: regionId, persona: personaId, pin, terms } })).accessToken)
   })
 
   return (
@@ -153,7 +154,11 @@ export default function Auth({ onDone }) {
             </div>
             {persona?.restricted && <p className="info">Ce profil est vérifié par notre équipe avant activation des opérations clients.</p>}
             <div className="field"><label htmlFor="auth-name">Prénom et nom</label><input id="auth-name" autoComplete="name" value={name} onChange={e => setName(e.target.value)} /></div>
-            <button className="cta" disabled={!personaId || name.trim().length < 2}>Continuer</button>
+            <label className="consent">
+              <input type="checkbox" checked={terms} onChange={e => setTerms(e.target.checked)} />
+              <span>J’accepte les <a href="/legal.html" target="_blank" rel="noopener">conditions d’utilisation et la politique de confidentialité</a>.</span>
+            </label>
+            <button className="cta" disabled={!personaId || name.trim().length < 2 || !terms}>Continuer</button>
             <button type="button" className="cta quiet" onClick={() => setStep('region')}>Changer de pays</button>
           </form>
         )}

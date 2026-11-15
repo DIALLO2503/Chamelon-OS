@@ -81,9 +81,13 @@ node --test --test-name-pattern="webhooks" server/test/money.test.js
 
 The pattern matches test names. Each file resets the database, so run one file at a time.
 
+## Browser tests
+
+`npm run build && npm run e2e` runs `e2e/app.test.js` with Playwright on a phone-sized screen (4 tests): sign-up with consent, sign-in with a wrong then right secret code, a person without the app confirming a payment from a link with a code, and the terms page. It seeds and starts its own sandbox server on port 3190, on the database in `E2E_DATABASE_URL` (default local `nexus_e2e`), which it **wipes** first. CI runs it in its own job.
+
 ## Not tested
 
-- The frontend (no component or browser tests; Playwright is installed but unused for the app).
+- Most of the frontend: the browser tests cover sign-up, sign-in and one public link, not the modules, the action sheet's money flows or the admin console.
 - Load and performance, multi-process scheduler and outbox behaviour.
 - A real partner; a real Twilio account or gateway phone (the messaging and pilot tests use local stand-ins, so delivery, sender registration and WhatsApp template approval are unverified); live mode beyond its configuration checks.
 - Upload re-encoding and most upload access rules (only dispute evidence photos are covered); most admin endpoints (users, KYC, roles, outbox retry, audit); link expiry; PIN lockout; the reconciliation alert path.

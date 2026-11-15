@@ -24,19 +24,21 @@ async function linkAct(token, action, input = {}, { otp = true } = {}) {
 
 test('sign-up and sign-in: verified phone, matching country, PIN, rotating refresh, revocation', async () => {
   const p = phone('SN')
-  assert.equal((await http('/auth/register', { body: { name: 'X', region: 'SN', persona: 'driver', pin: '4826' } })).status, 401, 'no sign-up without a verified phone')
+  assert.equal((await http('/auth/register', { body: { name: 'X', region: 'SN', persona: 'driver', pin: '4826', terms: true } })).status, 401, 'no sign-up without a verified phone')
   const { sandboxCode } = await http('/auth/otp', { body: { phone: p } })
   const { signupToken } = await http('/auth/verify', { body: { phone: p, code: sandboxCode } })
-  assert.equal((await http('/auth/register', { body: { signupToken, name: 'Awa Gueye', region: 'FR', persona: 'student', pin: '4826' } })).status, 400, 'a Senegalese number cannot open a French account')
-  assert.equal((await http('/auth/register', { body: { signupToken, name: 'Awa Gueye', region: 'SN', persona: 'driver', pin: '1234' } })).status, 400, 'obvious PINs are refused')
-  const reg = await http('/auth/register', { body: { signupToken, name: 'Awa Gueye', region: 'SN', persona: 'driver', pin: '4826' } })
+  assert.equal((await http('/auth/register', { body: { signupToken, name: 'Awa Gueye', region: 'FR', persona: 'student', pin: '4826', terms: true } })).status, 400, 'a Senegalese number cannot open a French account')
+  assert.equal((await http('/auth/register', { body: { signupToken, name: 'Awa Gueye', region: 'SN', persona: 'driver', pin: '1234', terms: true } })).status, 400, 'obvious PINs are refused')
+  assert.equal((await http('/auth/register', { body: { signupToken, name: 'Awa Gueye', region: 'SN', persona: 'driver', pin: '4826' } })).status, 400, 'no account without accepting the terms')
+  const reg = await http('/auth/register', { body: { signupToken, name: 'Awa Gueye', region: 'SN', persona: 'driver', pin: '4826', terms: true } })
   assert.ok(reg.accessToken)
+  assert.equal((await one(pool, 'SELECT terms_version FROM users WHERE phone=$1', [p])).terms_version, '2026-11', 'the accepted version is kept')
   const me = await http('/me', { token: reg.accessToken })
   assert.deepEqual(me.experience.nav.map(m => m.label), ['Accueil', 'Gains', 'Natt', 'Compte', 'Services'])
   // Sign in again on a new device: code, then PIN. Five wrong PINs lock the account for 15 minutes.
   const c2 = (await http('/auth/otp', { body: { phone: p } })).sandboxCode
   const { pinToken } = await http('/auth/verify', { body: { phone: p, code: c2 } })
-  const login = await http('/auth/pin', { body: { pinToken, pin: '4826' } })
+  const login = await http('/auth/pin', { body: { pinToken, pin: '4826', terms: true } })
   assert.ok(login.accessToken)
   const cookie = login.cookie.split(';')[0]
   const refreshed = await http('/auth/refresh', { body: {}, cookie })

@@ -53,7 +53,7 @@ Related: [architecture.md](architecture.md#request-lifecycle), [security.md](sec
 | `POST /verify` | `{ phone, code }` | Known phone: `{ pinToken, name }` (5 min). New phone: `{ signupToken }` (15 min). |
 | `POST /pin` | `{ pinToken, pin }` | `{ accessToken }` + refresh cookie |
 | `POST /pin/reset` | `{ pinToken, pin }` (the new PIN) | `{ accessToken, holdHours }` + cookie. Replaces a forgotten PIN, revokes all other sessions; money confirmations answer 423 for `holdHours`. 403 if the account is frozen. |
-| `POST /register` | `{ signupToken, name, region, persona, pin }` | `{ accessToken }` + cookie. Phone must start with the region's dial code; persona must exist there; PIN 4–6 digits, not trivial. 409 if the phone has an account. |
+| `POST /register` | `{ signupToken, name, region, persona, pin, terms: true }` | `{ accessToken }` + cookie. Phone must start with the region's dial code; persona must exist there; PIN 4–6 digits, not trivial. 409 if the phone has an account. |
 | `POST /refresh` | cookie | `{ accessToken }` + rotated cookie; old refresh value is dead. 401 clears the cookie. |
 | `POST /logout` | cookie | `{ ok: true }`; session revoked. |
 

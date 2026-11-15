@@ -58,7 +58,7 @@ test('sign-up is offered and accepted only in the pilot countries', async () => 
   const signup = async (p, region, persona) => {
     const { sandboxCode } = await post('/auth/otp', { phone: p })
     const { signupToken } = await post('/auth/verify', { phone: p, code: sandboxCode })
-    return post('/auth/register', { signupToken, name: 'Test Pilote', region, persona, pin: '4826' })
+    return post('/auth/register', { signupToken, name: 'Test Pilote', region, persona, pin: '4826', terms: true })
   }
   assert.equal((await signup(phone('GN'), 'GN', 'artisan')).status, 200)
   const closed = await signup(phone('MA'), 'SN', 'driver')
@@ -82,8 +82,8 @@ test('the first admin is created from the command line and chooses a secret code
   const { sandboxCode } = await post('/auth/otp', { phone: p })
   const { pinToken, name } = await post('/auth/verify', { phone: p, code: sandboxCode })
   assert.equal(name, 'Admin Pilote')
-  assert.equal((await post('/auth/pin', { pinToken, pin: '4826' })).status, 403, 'no secret code yet')
-  const { accessToken } = await post('/auth/pin/reset', { pinToken, pin: '4826' })
+  assert.equal((await post('/auth/pin', { pinToken, pin: '4826', terms: true })).status, 403, 'no secret code yet')
+  const { accessToken } = await post('/auth/pin/reset', { pinToken, pin: '4826', terms: true })
   const overview = await fetch(`${base}/admin/overview`, { headers: { Authorization: `Bearer ${accessToken}` } })
   assert.equal(overview.status, 200)
 })
@@ -119,7 +119,7 @@ test('the funnel counts who opened a link, who acted on it and who signed up aft
   // The client then opens an account with the same number.
   const otp = await post('/auth/otp', { phone: engaged.p })
   const { signupToken } = await post('/auth/verify', { phone: engaged.p, code: otp.sandboxCode })
-  assert.equal((await post('/auth/register', { signupToken, name: 'Cliente Pilote', region: 'MA', persona: 'parent', pin: '4826' })).status, 200)
+  assert.equal((await post('/auth/register', { signupToken, name: 'Cliente Pilote', region: 'MA', persona: 'parent', pin: '4826', terms: true })).status, 200)
 
   const row = (await linkFunnel()).find(r => r.region === 'MA' && r.kind === 'job')
   assert.deepEqual({ sent: row.sent, opened: row.opened, acted: row.acted, signed_up: row.signed_up, openRate: row.openRate }, { sent: 2, opened: 1, acted: 1, signed_up: 1, openRate: 50 })

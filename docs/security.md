@@ -150,6 +150,7 @@ Stated plainly.
 - `escrow.refund` and `orders.refund` are money actions: quote first, PIN to confirm.
 - Either side of an open dispute can add evidence (a statement of up to 500 characters, a photo, or both; 10 pieces per side): action `evidence` on the escrow, job or order in the app, and on the public link behind a login code. A photo must have been uploaded by the same person. Evidence closes when the dispute is resolved.
 - A forgotten secret code can be replaced after a login code, with a 24-hour hold on money actions (above).
+- Sign-up requires accepting the terms (`public/legal.html`, a draft pending legal review); the accepted version and time are stored on the account (`users.terms_version`, `terms_accepted_at`).
 - Photos are served again: with the default `UPLOAD_DIR` (`.local/uploads`) every `GET /api/uploads/:id` answered 404, because Express refuses a bare absolute path containing a dot-segment.
 
 **Not implemented:** sanctions/PEP screening, transaction monitoring and suspicious-activity reporting, partner statement reconciliation, catalog versioning, device binding, CSV export for regulators, off-server backups, metrics and error tracking, i18n, link revocation UI.

@@ -10,6 +10,7 @@
     "admin:create": "node server/cli/create-admin.js",
     "build": "vite build",
     "start": "vite build && node server/index.js",
+    "e2e": "node --test --test-concurrency=1 e2e/app.test.js",
     "test": "node --test --test-concurrency=1 server/test/money.test.js server/test/flows.test.js server/test/fixes.test.js server/test/messaging.test.js server/test/pilot.test.js"
   },
   "dependencies": {

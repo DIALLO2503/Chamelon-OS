@@ -17,6 +17,8 @@ const PIN_MAX_FAILURES = 5
 const ACCESS_TTL = '15m'
 const REFRESH_DAYS = 30
 const COOKIE = 'nexus_rt'
+// Bump when public/legal.html changes in substance; the version each user accepted is stored on their account.
+export const TERMS_VERSION = '2026-11'
 
 const otpHash = (phone, code) => sha256(`${phone}:${code}:${config.jwtSecret}`)
 const fullPhone = raw => (String(raw ?? '').trim().startsWith('+') ? normalizePhone(raw) : fail("Indiquez le numéro avec l'indicatif du pays"))
@@ -187,7 +189,8 @@ auth.post('/pin/reset', async (req, res) => {
 
 auth.post('/register', async (req, res) => {
   const { phone } = readPurpose(req.body?.signupToken, 'signup')
-  const { name, region, persona, pin } = req.body ?? {}
+  const { name, region, persona, pin, terms } = req.body ?? {}
+  if (terms !== true) fail('Acceptez les conditions d’utilisation pour créer votre compte')
   const clean = String(name ?? '').trim()
   if (clean.length < 2 || clean.length > 60) fail('Indiquez votre nom')
   if (!personaExists(region, persona)) fail('Profil indisponible dans ce pays')
@@ -196,6 +199,7 @@ auth.post('/register', async (req, res) => {
   const out = await tx(async c => {
     if (await one(c, 'SELECT 1 FROM users WHERE phone=$1', [phone])) fail('Un compte existe déjà pour ce numéro', 409)
     const user = await createUser(c, { phone, name: clean, region, persona, pinHash })
+    await c.query('UPDATE users SET terms_version=$2, terms_accepted_at=now() WHERE id=$1', [user.id, TERMS_VERSION])
     return openSession(c, user, req, res)
   })
   res.json(out)
