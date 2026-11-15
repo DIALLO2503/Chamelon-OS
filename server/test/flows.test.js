@@ -180,6 +180,11 @@ test('scheduled transfers pay once per month even when two runs overlap', async 
   await healthy(assert)
 })
 
+test('the demo reset exists only in the sandbox: refused in test (and live), hidden from the sign-in screen', async () => {
+  assert.equal((await http('/sandbox/reset', { body: {} })).status, 404)
+  assert.equal((await http('/config/sandbox')).reset, false)
+})
+
 test("Côte d'Ivoire and Cameroon: local accounts in F CFA, and the diaspora pays out in XOF / XAF", async () => {
   const ci = await user('CI', 'commercante'), cm = await user('CM', 'boutique')
   const ciHome = await engine.home(ci.id), cmMe = await engine.me(cm.id)

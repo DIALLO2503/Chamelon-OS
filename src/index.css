@@ -101,6 +101,7 @@ button:disabled { cursor: not-allowed; }
 .bar.over i { background: var(--bad); }
 .day { display: flex; flex-direction: column; gap: 6px; }
 .day-label { padding-left: 2px; }
+.demo-group { display: flex; flex-direction: column; gap: 6px; }
 .kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(96px, 1fr)); gap: 8px; }
 .kpi { padding: 12px; border-radius: 16px; background: var(--card); border: 1px solid var(--line); min-width: 0; }
 .kpi b { display: block; font: 800 1.05em 'Bricolage Grotesque Variable', system-ui, sans-serif; overflow-wrap: anywhere; }

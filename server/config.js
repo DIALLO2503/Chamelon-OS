@@ -75,6 +75,8 @@ export const config = {
   // Earned-wage advances are lending: in live they stay closed until a licensed lender funds a credit line at the payment
   // partner. ADVANCE_LENDER names it (shown in audits); the sandbox simulates one.
   advances: { lender: env.ADVANCE_LENDER || null },
+  // Sandbox only: a "reset the demo" button on the sign-in screen. SANDBOX_RESET=off hides it (e.g. a demo shown to many people).
+  sandboxReset: NEXUS_ENV === 'sandbox' && env.SANDBOX_RESET !== 'off',
   autoReleaseDays: Number(env.AUTO_RELEASE_DAYS || 7),
   orderReleaseHours: Number(env.ORDER_RELEASE_HOURS || 72),
 }

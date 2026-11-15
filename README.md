@@ -35,11 +35,11 @@ sudo -u postgres createdb -O nexus nexus_test
 
 # 2. Install, seed, build, run
 npm install
-npm run seed                     # migrates, then creates 19 demo accounts (PIN 2580); does nothing if users exist
+npm run seed                     # migrates, then creates 31 demo accounts (PIN 2580); does nothing if users exist
 npm run build                    # builds the PWA into dist/
 npm run server                   # http://localhost:3001 (serves dist/ and /api)
 
-# 3. Tests (64, end to end, against nexus_test; the schema is dropped and recreated)
+# 3. Tests (65, end to end, against nexus_test; the schema is dropped and recreated)
 npm test
 ```
 
@@ -78,6 +78,11 @@ All use PIN `2580`. In sandbox the sign-in screen lists them (`GET /api/config/s
 | +33600000003 | Karim Bennani | FR · builder | held |
 | +971500000001 | Abdoulaye Kane | AE · worker | held |
 | +971500000002 | Samir Khalil | AE · trader | held |
+| +224620000003, +224620000004 | Alpha Diallo, Fanta Sylla | GN · ouvrier, parent | record |
+| +2250700000001 … 05 | Adjoua Kouassi, Awa Coulibaly, Yao Konan, Seydou Traoré, Akissi N’Guessan | CI · seller, commerçante, artisan, ouvrier, parent | record |
+| +237650000001 … 05 | Marie Ngono, Jean-Paul Mbarga, Emmanuel Fotso, Ibrahim Moussa, Brigitte Atangana | CM · seller, boutique, artisan, ouvrier, parent | record |
+
+Every profile of every country has one account. In sandbox the sign-in screen groups them by country; once signed in, the people icon at the top of the home screen (or **Services → Changer de compte**) goes back to the list. **Recommencer la démo** at the bottom of the sign-in screen puts every account, balance and history back as seeded (`POST /api/sandbox/reset`, sandbox only; hide it with `SANDBOX_RESET=off`).
 
 ## Configuration
 
@@ -122,7 +127,7 @@ All variables are read in `server/config.js` (plus `CUSTODY_<ID>` in `server/cat
 | [docs/partner-integration.md](docs/partner-integration.md) | Go-live checklist for a licensed partner |
 | [docs/pilot.md](docs/pilot.md) | Running the two-country pilot on one server, with phones as SMS gateways and no payment partner |
 | [docs/demo.md](docs/demo.md) | A public sandbox demo on Render in a few clicks (`render.yaml`), with the demo accounts |
-| [docs/testing.md](docs/testing.md) | What the 64 tests prove and how to add one |
+| [docs/testing.md](docs/testing.md) | What the 65 tests prove and how to add one |
 | [docs/glossary.md](docs/glossary.md) | Product and domain terms |
 
 ## Layout

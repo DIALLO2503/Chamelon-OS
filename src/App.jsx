@@ -78,7 +78,7 @@ function Services({ openAdmin }) {
       {user.pendingRoles.length > 0 && <div className="insight notice"><Icon name="clock" size={22} /><div><p>Votre demande d’agrément est en cours de vérification par notre équipe.</p></div></div>}
       <div className="card account">
         <div><strong>{user.name}</strong><div className="muted">{user.phone} · {KYC[user.kycLevel]}</div></div>
-        <button className="chip-btn" onClick={logout}><Icon name="log-out" size={16} />Se déconnecter</button>
+        <button className="chip-btn" onClick={logout}><Icon name={me.sandbox ? 'users-round' : 'log-out'} size={16} />{me.sandbox ? 'Changer de compte' : 'Se déconnecter'}</button>
       </div>
       <DataRights />
       {user.isAdmin && <button className="cta quiet" onClick={openAdmin}><Icon name="shield-check" size={18} /> Console d’administration</button>}
@@ -110,6 +110,7 @@ function MainApp() {
     <header className="head">
       <span className="disc soft"><Icon name={experience.persona.icon} /></span>
       <div className="grow"><strong>{user.name}</strong><div className="muted">{experience.persona.label} · {experience.region.name}</div></div>
+      {me.sandbox && <button className="ibtn" aria-label="Changer de compte (bac à sable)" title="Changer de compte" onClick={logout}><Icon name="users-round" /></button>}
       <button className="ibtn bell" aria-label={`Messages${me.unread ? `, ${me.unread} non lus` : ''}`} onClick={() => setTab('inbox')}>
         <Icon name="bell" />{me.unread > 0 && <span className="badge">{me.unread > 9 ? '9+' : me.unread}</span>}
       </button>

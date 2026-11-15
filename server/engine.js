@@ -1,4 +1,5 @@
 import { pool, tx, one } from './db.js'
+import { config } from './config.js'
 import { MODULES, ACTIONS, REGIONS, fill, validateCatalog, moduleAvailable } from './catalog.js'
 import { fail, toMinor, normalizePhone, newId, sha256, stable } from './core.js'
 import { ctxFor, balanceBlock, feedBlock } from './context.js'
@@ -98,6 +99,7 @@ export async function me(userId) {
   return {
     user: { id: ctx.user.id, name: ctx.user.name, phone: ctx.user.phone, region: ctx.user.region, persona: ctx.user.persona, kycLevel: ctx.user.kyc_level, pendingRoles, isAdmin: ctx.hasRole('admin') },
     experience: await experience(c, ctx), unread,
+    sandbox: config.sandbox, // the interface offers a quick "change account" for testing every profile
   }
 }
 

@@ -1,6 +1,6 @@
 # Online demo
 
-A public copy of the **sandbox** to show Nexus to partners and investors: the 19 demo accounts (PIN `2580`), the simulated payment partner, login codes shown on screen. It is not the pilot: for real people, follow [pilot.md](pilot.md).
+A public copy of the **sandbox** to show Nexus to partners and investors: the 31 demo accounts, one per profile and country (PIN `2580`), the simulated payment partner, login codes shown on screen. It is not the pilot: for real people, follow [pilot.md](pilot.md).
 
 ## Deploy on Render
 
@@ -14,6 +14,6 @@ A public copy of the **sandbox** to show Nexus to partners and investors: the 19
 ## What to know
 
 - **Free plan.** The app sleeps after about 15 minutes without visits; the first visit then takes up to a minute. Render's free PostgreSQL is deleted after 30 days: upgrade it, or recreate it and redeploy (the seed runs again on an empty database).
-- **Reset the demo.** In the database's page, delete and recreate it, or connect with `psql` and run `DROP SCHEMA public CASCADE; CREATE SCHEMA public;`, then restart the service.
+- **Reset the demo.** The **Recommencer la démo** button at the bottom of the sign-in screen puts everything back as seeded, in a few seconds. Anyone with the address can press it: to hide it, add `SANDBOX_RESET=off` to the service's environment.
 - **Photos** are stored on the container's disk and disappear at each deploy. Fine for a demo.
 - **Anyone with the address can sign in** to every demo account: the sign-in screen lists them. Share the link, not the data.

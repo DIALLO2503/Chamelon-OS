@@ -39,8 +39,29 @@ app.get('/api/config/regions', (_, res) => res.json({ regions: listRegions() }))
 // Sandbox only: ready-made test accounts on the sign-in screen. Disabled entirely in live.
 app.get('/api/config/sandbox', async (_, res) => {
   if (!config.sandbox) return res.json({ accounts: [] })
-  const users = await all(pool, `SELECT u.phone, u.name, u.region, u.persona, EXISTS (SELECT 1 FROM roles r WHERE r.user_id=u.id AND r.role='admin' AND r.status='active') AS admin FROM users u ORDER BY u.created_at LIMIT 30`)
-  res.json({ pin: '2580', accounts: users.map(u => ({ phone: u.phone, name: u.name, label: u.admin ? 'Administration' : `${REGIONS[u.region].personas[u.persona].label} · ${REGIONS[u.region].name} (${REGIONS[u.region].custody === 'held' ? 'avec partenaire' : 'paiements en direct'})` })) })
+  const users = await all(pool, `SELECT u.phone, u.name, u.region, u.persona, EXISTS (SELECT 1 FROM roles r WHERE r.user_id=u.id AND r.role='admin' AND r.status='active') AS admin FROM users u ORDER BY u.created_at LIMIT 100`)
+  // Grouped by country in catalog order, administrators first, so every profile is one tap away.
+  const order = Object.keys(REGIONS)
+  const accounts = users.map(u => ({
+    phone: u.phone, name: u.name,
+    group: u.admin ? 'Administration' : `${REGIONS[u.region].name} · ${REGIONS[u.region].custody === 'held' ? 'avec partenaire de paiement' : 'paiements en direct'}`,
+    label: u.admin ? 'Administration' : REGIONS[u.region].personas[u.persona].label,
+    rank: u.admin ? -1 : order.indexOf(u.region),
+  })).sort((a, b) => a.rank - b.rank)
+  res.json({ pin: '2580', reset: config.sandboxReset, accounts: accounts.map(({ rank, ...a }) => a) })
+})
+// Sandbox only: back to the original demo data (every account, balance and history), e.g. after testing every profile.
+let resetting = false
+app.post('/api/sandbox/reset', limit(3), async (req, res) => {
+  if (!config.sandboxReset) return res.status(404).json({ error: 'Introuvable' })
+  if (resetting) return res.status(409).json({ error: 'Réinitialisation déjà en cours' })
+  resetting = true
+  try {
+    const { resetDemo } = await import('./seed.js')
+    const accounts = await resetDemo()
+    log.info({ ip: req.ip, accounts }, 'sandbox reset')
+    res.json({ ok: true, accounts })
+  } finally { resetting = false }
 })
 app.use('/api/auth', limit(20), auth)
 app.use('/api/public', limit(60), publicUploadRoutes, publicRoutes)

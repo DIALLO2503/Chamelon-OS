@@ -1,7 +1,8 @@
 // Sandbox demo data. Refuses to run outside the sandbox. Everything goes through the same engine actions a real user
 // would trigger, with partner confirmations simulated, so balances, states and history match the ledger.
+// The seed settles partner operations itself. When it runs inside the server (sandbox reset), the server's own simulated
+// settlements may arrive too: they find the operation already settled and are ignored.
 import { randomUUID } from 'node:crypto'
-process.env.NEXUS_NO_AUTO_SETTLE ??= '1' // the seed settles partner operations itself
 import { config } from './config.js'
 import { pool, tx, one, migrate } from './db.js'
 import { createUser, hashPin } from './auth.js'
@@ -36,6 +37,19 @@ const USERS = [
   ['karim', '+33600000003', 'Karim Bennani', 'FR', 'builder', { fund: '9500' }],
   ['abdoulaye', '+971500000001', 'Abdoulaye Kane', 'AE', 'worker', { fund: '5200' }],
   ['samir', '+971500000002', 'Samir Khalil', 'AE', 'trader', { fund: '64000', kyc: 2 }],
+  // One account for every remaining profile, so each one can be tried from the sign-in screen.
+  ['alpha', '+224620000003', 'Alpha Diallo', 'GN', 'ouvrier'],
+  ['fanta', '+224620000004', 'Fanta Sylla', 'GN', 'parent'],
+  ['adjoua', '+2250700000001', 'Adjoua Kouassi', 'CI', 'seller'],
+  ['awa', '+2250700000002', 'Awa Coulibaly', 'CI', 'commercante'],
+  ['yao', '+2250700000003', 'Yao Konan', 'CI', 'artisan'],
+  ['seydou', '+2250700000004', 'Seydou Traoré', 'CI', 'ouvrier'],
+  ['akissi', '+2250700000005', 'Akissi N’Guessan', 'CI', 'parent'],
+  ['marie', '+237650000001', 'Marie Ngono', 'CM', 'seller'],
+  ['jeanpaul', '+237650000002', 'Jean-Paul Mbarga', 'CM', 'boutique'],
+  ['fotso', '+237650000003', 'Emmanuel Fotso', 'CM', 'artisan'],
+  ['ibrahim', '+237650000004', 'Ibrahim Moussa', 'CM', 'ouvrier'],
+  ['brigitte', '+237650000005', 'Brigitte Atangana', 'CM', 'parent'],
 ]
 
 async function settle() {
@@ -139,12 +153,31 @@ export async function seedDemo() {
   for (const [category, amount, label] of [['Loyer', '450', 'Résidence universitaire'], ['Courses', '86.40', 'Supermarché']]) await act('aminata', 'budget', 'expense', { category, amount, label })
   await act('aissatou', 'float', 'cashIn', { amount: '75000', phone: u.diarra.phone })
 
+  // Côte d'Ivoire and Cameroon: a sale collected in person and confirmed, a credit book, a njangi being formed.
+  await act('adjoua', 'pos', 'chargeRecorded', { amount: '15000', label: 'Pagne wax', phone: u.akissi.phone })
+  await act('akissi', 'wallet', 'confirmRecorded', {}, await id(`SELECT recorded_id AS id FROM pos_sales WHERE user_id=$1`, u.adjoua.id))
+  await act('awa', 'creditbook', 'add', { name: 'Mariam', phone: '+2250700000088', amount: '6500' })
+  await act('jeanpaul', 'creditbook', 'add', { name: 'Pauline', phone: '+237650000088', amount: '4000' })
+  await act('marie', 'tontine', 'create', { name: 'Njangi des commerçantes', amount: '10000', frequency: 'monthly', members: `${u.jeanpaul.phone}, ${u.brigitte.phone}` })
+
   // Six months of past sales and payments, so the home trend and money alerts have real data to show.
   await seedHistory(u)
   return true
 }
 
+// Sandbox only: empties every table (the schema and its migrations stay) and seeds the demo again.
+// TRUNCATE does not fire the ledger's append-only triggers, which guard against UPDATE and DELETE.
+export async function resetDemo() {
+  if (config.env !== 'sandbox') throw new Error('The demo reset only runs with NEXUS_ENV=sandbox')
+  await migrate()
+  const tables = (await pool.query(`SELECT tablename FROM pg_tables WHERE schemaname='public' AND tablename <> 'schema_migrations'`)).rows.map(r => `"${r.tablename}"`)
+  if (tables.length) await pool.query(`TRUNCATE ${tables.join(', ')} RESTART IDENTITY CASCADE`)
+  await seedDemo()
+  return USERS.length
+}
+
 if (process.argv[1]?.endsWith('seed.js')) {
+  process.env.NEXUS_NO_AUTO_SETTLE ??= '1' // run on its own, the seed settles partner operations itself
   const done = await seedDemo()
   console.log(done ? `Sandbox seeded: ${USERS.length} demo accounts, PIN ${DEMO_PIN}` : 'Database already has users; nothing seeded')
   await pool.end()

@@ -3,6 +3,31 @@ import { api, session } from './api.js'
 import Icon from './ui/Icon.jsx'
 import PinPad from './ui/PinPad.jsx'
 
+const groupBy = accounts => [...accounts.reduce((m, a) => m.set(a.group, [...(m.get(a.group) ?? []), a]), new Map())]
+
+// Sandbox only: puts every demo account, balance and history back as it was, after testing. Asks once before doing it.
+function ResetDemo({ onDone }) {
+  const [state, setState] = useState({ confirm: false, busy: false, note: '', error: '' })
+  const reset = async () => {
+    setState({ confirm: false, busy: true, note: '', error: '' })
+    try {
+      const r = await api('/sandbox/reset', { body: {} })
+      setState({ confirm: false, busy: false, note: `Démo réinitialisée : ${r.accounts} comptes remis à zéro.`, error: '' })
+      onDone()
+    } catch (e) { setState({ confirm: false, busy: false, note: '', error: e.message }) }
+  }
+  return (
+    <div className="card account">
+      <div className="grow"><strong>Recommencer la démo</strong><div className="muted">Remet tous les comptes de démonstration dans leur état de départ (soldes, historique, demandes). Vos essais sont effacés.</div></div>
+      {state.confirm
+        ? <><button type="button" className="chip-btn primary" onClick={reset}>Oui, tout remettre à zéro</button><button type="button" className="chip-btn" onClick={() => setState(s => ({ ...s, confirm: false }))}>Annuler</button></>
+        : <button type="button" className="chip-btn" disabled={state.busy} onClick={() => setState({ confirm: true, busy: false, note: '', error: '' })}><Icon name={state.busy ? 'loader-circle' : 'rotate-ccw'} size={16} />{state.busy ? 'Réinitialisation…' : 'Réinitialiser'}</button>}
+      {state.note && <p className="info" role="status">{state.note}</p>}
+      {state.error && <p className="error" role="alert">{state.error}</p>}
+    </div>
+  )
+}
+
 // New phone: code → country → profile → name → secret code (twice). Known phone: code → secret code.
 export default function Auth({ onDone }) {
   const [regions, setRegions] = useState([])
@@ -78,14 +103,20 @@ export default function Auth({ onDone }) {
             {sandbox.accounts.length > 0 && (
               <section className="sec">
                 <h2>Comptes de démonstration</h2>
-                <p className="muted">Bac à sable : argent fictif, partenaire simulé. Code secret de tous les comptes : <strong>{sandbox.pin}</strong>.</p>
-                <div className="card">
-                  {sandbox.accounts.map(a => (
-                    <button type="button" key={a.phone} className="row row-main" disabled={busy} onClick={() => requestCode(a.phone)}>
-                      <div className="grow"><div className="row-title">{a.name}</div><div className="muted">{a.label}</div></div><Icon name="chevron-right" size={16} />
-                    </button>
-                  ))}
-                </div>
+                <p className="muted">Bac à sable : argent fictif, partenaire simulé. Un compte par profil et par pays. Code secret de tous les comptes : <strong>{sandbox.pin}</strong>.</p>
+                {groupBy(sandbox.accounts).map(([group, accounts]) => (
+                  <div key={group} className="demo-group">
+                    <div className="muted day-label">{group}</div>
+                    <div className="card">
+                      {accounts.map(a => (
+                        <button type="button" key={a.phone} className="row row-main" disabled={busy} onClick={() => requestCode(a.phone)}>
+                          <div className="grow"><div className="row-title">{a.name}</div><div className="muted">{a.label}</div></div><Icon name="chevron-right" size={16} />
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+                {sandbox.reset && <ResetDemo onDone={() => api('/config/sandbox').then(setSandbox).catch(() => {})} />}
               </section>
             )}
           </form>
