@@ -53,7 +53,7 @@ export const ACTIONS = {
 
 // Rates: units of currency per 1 EUR, scaled by 1e8 so conversions are exact integer arithmetic.
 // Sandbox values: in held custody the partner's quote replaces them.
-export const FX_E8_PER_EUR = { EUR: 100000000n, MAD: 1085000000n, XOF: 65595700000n, AED: 425000000n, GNF: 940000000000n }
+export const FX_E8_PER_EUR = { EUR: 100000000n, MAD: 1085000000n, XOF: 65595700000n, XAF: 65595700000n, AED: 425000000n, GNF: 940000000000n }
 // remitFeeByLevel: share of the sending fee charged at each reputation level (0-3). Kept commitments lower the price.
 export const PRICING = { remitFee: { EUR: 150, AED: 500 }, remitFeeByLevel: [1, 1, 0.5, 0], agentCommissionBps: 50 }
 
@@ -158,11 +158,39 @@ export const REGIONS = {
       parent,
     },
   },
+  CI: {
+    name: 'Côte d’Ivoire', currency: { code: 'XOF', symbol: 'F CFA', decimals: 0 }, languages: ['fr'], dialCode: '+225', custody: 'record',
+    vocab: { tontine: 'Tontine', escrow: 'Séquestre', reputation: 'Réputation' },
+    modules: ['wallet', 'tontine', 'escrow', 'jobs', 'orders', 'creditbook', 'invoices', 'family', 'score', 'inbox'],
+    corridors: [], billers: ['CIE', 'SODECI'],
+    limits: limits(L(200000, 500000, 2000000, 2000000), L(1000000, 2000000, 15000000, 4000000), L(5000000, 10000000, 50000000, 20000000)),
+    personas: {
+      seller: seller('WhatsApp, TikTok et Facebook. Faites payer avant de livrer.'),
+      commercante: { ...shop('Commerçante du marché', 20), tagline: 'Adjamé, Treichville ou quartier. Carnet de crédit, tontine et preuves de paiement.' },
+      artisan: artisan('Artisan du bâtiment', 'Chantiers à Abidjan et pour la diaspora. Faites valider chaque étape, preuve à l’appui.'),
+      ouvrier: worker,
+      parent,
+    },
+  },
+  CM: {
+    name: 'Cameroun', currency: { code: 'XAF', symbol: 'F CFA', decimals: 0 }, languages: ['fr', 'en'], dialCode: '+237', custody: 'record',
+    vocab: { tontine: 'Njangi', escrow: 'Séquestre', reputation: 'Réputation' },
+    modules: ['wallet', 'tontine', 'escrow', 'jobs', 'orders', 'creditbook', 'invoices', 'family', 'score', 'inbox'],
+    corridors: [], billers: ['ENEO', 'Camwater'],
+    limits: limits(L(200000, 500000, 2000000, 2000000), L(1000000, 2000000, 15000000, 4000000), L(5000000, 10000000, 50000000, 20000000)),
+    personas: {
+      seller: seller('WhatsApp et Facebook. Faites payer avant de livrer.'),
+      boutique: shop('Boutiquier'),
+      artisan: artisan('Artisan du bâtiment', 'Chantiers à Douala et Yaoundé. Faites valider chaque étape, preuve à l’appui.'),
+      ouvrier: worker,
+      parent,
+    },
+  },
   FR: {
     name: 'France', currency: { code: 'EUR', symbol: '€', decimals: 2 }, languages: ['fr'], dialCode: '+33', custody: 'held',
     vocab: { tontine: 'Tontine', escrow: 'Séquestre', reputation: 'Réputation' },
     modules: ['wallet', 'remit', 'tontine', 'budget', 'family', 'jobs', 'escrow', 'score', 'inbox'],
-    corridors: ['SN', 'MA', 'GN'], billers: [],
+    corridors: ['SN', 'MA', 'GN', 'CI', 'CM'], billers: [],
     limits: limits(L(15000, 15000, 15000, 15000), L(500000, 1000000, 1500000, 1500000), L(5000000, 5000000, 10000000, 10000000)),
     personas: {
       student: {

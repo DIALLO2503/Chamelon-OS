@@ -29,7 +29,7 @@ Product terms appear in French in the interface; their code identifiers are in b
 
 | Term | Meaning |
 |---|---|
-| **Region** | A country entry in `REGIONS` (MA, SN, GN, FR, AE): currency, dial code, custody, modules, profiles. |
+| **Region** | A country entry in `REGIONS` (MA, SN, GN, CI, CM, FR, AE): currency, dial code, custody, modules, profiles. |
 | **Persona / profile** | A configured role inside a country (seller, driver…): navigation, quick actions, home widgets. |
 | **Module** | A capability with a view, actions and widgets (`server/modules/*.js`). |
 | **Vocabulary token** | `{tontine}`, `{escrow}`, `{reputation}` in labels, replaced per country. |

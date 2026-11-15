@@ -62,6 +62,7 @@ Values in major units:
 | MA (MAD) | 0 / 1 / 2 | 2 000 / 10 000 / 50 000 | 5 000 / 20 000 / 100 000 | 20 000 / 100 000 / 500 000 | 5 000 / 20 000 / 200 000 |
 | SN (XOF) | 0 / 1 / 2 | 200 000 / 1 000 000 / 5 000 000 | 500 000 / 2 000 000 / 10 000 000 | 2 000 000 / 15 000 000 / 50 000 000 | 2 000 000 / 4 000 000 / 20 000 000 |
 | GN (GNF) | 0 / 1 / 2 | 5 M / 20 M / 100 M | 10 M / 40 M / 200 M | 40 M / 200 M / 1 000 M | 10 M / 50 M / 300 M |
+| CI (XOF), CM (XAF) | 0 / 1 / 2 | Same values as SN, in their own currency (placeholders until a partner's tier rules are signed) | | | |
 | FR (EUR) | 0 / 1 / 2 | 150 / 5 000 / 50 000 | 150 / 10 000 / 50 000 | 150 / 15 000 / 100 000 | 150 / 15 000 / 100 000 |
 | AE (AED) | 0 / 1 / 2 | 3 000 / 35 000 / 200 000 | 3 000 / 35 000 / 200 000 | 3 000 / 100 000 / 500 000 | 3 000 / 35 000 / 200 000 |
 
@@ -69,7 +70,7 @@ MA and GN limits only matter once those countries switch to `held`.
 
 ### FX arithmetic and rounding
 
-Rates are integers: units of each currency per 1 EUR, scaled by 1e8 (`FX_E8_PER_EUR` in `catalog.js`): EUR 1, MAD 10.85, XOF 655.957, AED 4.25, GNF 9 400.
+Rates are integers: units of each currency per 1 EUR, scaled by 1e8 (`FX_E8_PER_EUR` in `catalog.js`): EUR 1, MAD 10.85, XOF 655.957, XAF 655.957, AED 4.25, GNF 9 400. XOF (Senegal, Côte d'Ivoire) and XAF (Cameroon) are both pegged to the euro at the same rate but are distinct currencies: they never mix in one account.
 
 `convert(minor, from, to, round)` in `core.js` computes `minor × rate[to] × 10^dec[to] / (rate[from] × 10^dec[from])` in BigInt. `round = 'down'` (default) truncates; `'up'` adds one minor unit when there is a remainder.
 

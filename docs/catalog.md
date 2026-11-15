@@ -25,7 +25,7 @@ Related: [custody-stages.md](custody-stages.md), [architecture.md](architecture.
 | `custody` | `'record'` | [custody-stages.md](custody-stages.md) |
 | `vocab` | `{ tontine: 'Daret', escrow: 'Aman', reputation: 'Niya' }` | Fills `{tontine}`, `{escrow}`, `{reputation}` in labels and widget titles |
 | `modules` | `['wallet', 'tontine', …]` | Modules enabled in the country (union with the persona's `nav`, minus custody-hidden ones) |
-| `corridors` | `[]` (FR: `['SN', 'MA', 'GN']`, AE: `['MA', 'SN']`) | Countries this country may send to (remit, cross-border escrow and jobs) |
+| `corridors` | `[]` (FR: `['SN', 'MA', 'GN', 'CI', 'CM']`, AE: `['MA', 'SN']`) | Countries this country may send to (remit, cross-border escrow and jobs) |
 | `billers` | `['Lydec', 'Redal', 'ONEE']` | Options of `wallet.bill`; empty list blocks the form |
 | `cashAgents` | `true` (SN only) | Enables `wallet.cashCode` |
 | `limits` | `{ 0: L(...), 1: L(...), 2: L(...) }` | KYC limits in minor units: `single`, `daily`, `monthly`, `balance` ([money.md](money.md#limits-per-kyc-level)) |
