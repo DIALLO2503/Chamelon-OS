@@ -139,6 +139,7 @@ Actions per kind (OTP column: whether a code is needed):
 | Method, path | Body / query | Effect |
 |---|---|---|
 | `GET /overview` | | `{ counts: { users, pending_roles, disputes, failed_jobs, adjustments, frozen }, reconciliation: { ok, mismatches }, safeguarding: [{ currency, owed, held_at_partner, ok, owedText, heldText }] }` |
+| `GET /funnel?days=30` | | `{ days, users: [{ region, users, new_users, active_7d }], links: [{ region, kind, sent, opened, acted, signed_up, openRate, actRate, signupRate }] }`: accounts per country and, per recipient country and link type, how many invited people opened, acted and signed up. |
 | `GET /users` | `?q=` name or phone (ILIKE) | `{ users: [{ id, name, phone, region, persona, kyc_level, frozen, created_at, roles }] }` (50) |
 | `GET /users/:id` | | `{ user (no pin_hash), accounts, roles, events }` |
 | `POST /users/:id/freeze` | `{ frozen, reason }` | Sets `frozen`; freezing revokes all sessions |

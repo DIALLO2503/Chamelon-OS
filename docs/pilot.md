@@ -67,6 +67,17 @@ Everything lives in two Docker volumes: `db` (PostgreSQL) and `uploads` (photos)
 docker compose -f deploy/docker-compose.yml --env-file deploy/.env exec -T db pg_dump -U nexus nexus | gzip > nexus-$(date +%F).sql.gz
 ```
 
+## What to watch
+
+Console → **Pilote** (`GET /api/admin/funnel?days=30`):
+
+- **Accounts per country**: total, new in the period, active in the last 7 days.
+- **Links sent**, per recipient country and per type: people invited, how many opened the link, how many acted on it, how many later opened an account. A link re-sent to the same person for the same job or order counts once.
+
+The second table is the pilot's main result. The model assumes that someone who receives a link acts on it without installing anything, and that some of them then sign up. If few open, the problem is delivery or trust in the message; if many open and few act, it is the page.
+
+Opening is counted when the page loads, so a link preview fetched by a messaging app can count as an open; "acted" is exact.
+
 ## Before real users
 
 - **Personal data.** The server will hold names and phone numbers of people in Morocco and Guinea. Morocco's data-protection law (09-08, regulator CNDP) and Guinea's equivalent regulate collecting this data and storing it abroad. Get advice before onboarding people beyond a closed test group.

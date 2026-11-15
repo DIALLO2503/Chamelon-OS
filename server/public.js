@@ -213,6 +213,7 @@ publicRoutes.get('/:token', async (req, res) => {
   const link = await resolveLink(pool, req.params.token)
   const party = link.party_id ? await partyById(pool, link.party_id) : null
   const view = await KINDS[link.kind].view(pool, link, party)
+  await pool.query('UPDATE links SET opens = opens + 1, first_opened_at = COALESCE(first_opened_at, now()) WHERE id=$1', [link.id])
   res.json({ kind: link.kind, ...view, phone: party ? `${party.phone.slice(0, 4)} •••• ${party.phone.slice(-2)}` : null })
 })
 
@@ -239,6 +240,7 @@ publicRoutes.post('/:token/act', async (req, res) => {
   if (input.phone !== undefined) input.phone = normalizePhone(input.phone, party ? REGIONS[regionOfPhone(party.phone)]?.dialCode : '')
   const message = await tx(async c => {
     const msg = await kind[action.id](c, link, party, input)
+    await c.query('UPDATE links SET first_acted_at = COALESCE(first_acted_at, now()) WHERE id=$1', [link.id])
     await audit(c, { actorType: 'party', actorId: party?.id ?? null, action: `link.${link.kind}.${action.id}`, objectType: link.kind, objectId: link.ref_id, ip: req.ip })
     return msg
   })

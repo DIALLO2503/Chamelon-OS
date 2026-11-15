@@ -23,6 +23,30 @@ export async function safeguarding(client = pool) {
   return rows.map(r => ({ ...r, ok: r.owed <= r.held_at_partner, owedText: money(r.owed, r.currency), heldText: money(r.held_at_partner, r.currency) }))
 }
 
+// The pilot's main measure: of the people who were sent a link, how many opened it, acted on it, and later signed up.
+// One invitation = one person on one object (a job, an order...), however many times the link was re-sent.
+export async function linkFunnel(days = 30) {
+  const ids = Object.keys(REGIONS)
+  const rows = await all(pool, `
+    WITH inv AS (
+      SELECT l.kind, l.party_id, l.ref_id, min(l.created_at) AS sent_at, min(l.first_opened_at) AS opened_at, min(l.first_acted_at) AS acted_at
+      FROM links l WHERE l.created_at > now() - make_interval(days => $3) GROUP BY l.kind, l.party_id, l.ref_id)
+    SELECT COALESCE(r.id, '?') AS region, i.kind, count(*)::int AS sent, count(i.opened_at)::int AS opened, count(i.acted_at)::int AS acted,
+      count(*) FILTER (WHERE u.created_at > i.sent_at)::int AS signed_up
+    FROM inv i LEFT JOIN parties p ON p.id = i.party_id LEFT JOIN users u ON u.id = p.user_id
+      LEFT JOIN unnest($1::text[], $2::text[]) AS r(id, dial) ON p.phone LIKE r.dial || '%'
+    GROUP BY 1, 2 ORDER BY 1, 2`, [ids, ids.map(id => REGIONS[id].dialCode), days])
+  const pct = (n, d) => (d ? Math.round((100 * n) / d) : null)
+  return rows.map(r => ({ ...r, regionName: REGIONS[r.region]?.name ?? 'Sans numéro', openRate: pct(r.opened, r.sent), actRate: pct(r.acted, r.sent), signupRate: pct(r.signed_up, r.sent) }))
+}
+adminRoutes.get('/funnel', async (req, res) => {
+  const days = Math.min(Math.max(Number(req.query.days) || 30, 1), 365)
+  const users = await all(pool, `SELECT region, count(*)::int AS users, count(*) FILTER (WHERE created_at > now() - make_interval(days => $1))::int AS new_users,
+    (SELECT count(DISTINCT a.actor_id) FROM audit_events a JOIN users x ON x.id::text = a.actor_id WHERE x.region = users.region AND a.actor_type='user' AND a.created_at > now() - interval '7 days')::int AS active_7d
+    FROM users GROUP BY region ORDER BY region`, [days])
+  res.json({ days, users: users.map(u => ({ ...u, regionName: REGIONS[u.region]?.name ?? u.region })), links: await linkFunnel(days) })
+})
+
 adminRoutes.get('/overview', async (req, res) => {
   const [counts, mismatches, safe] = await Promise.all([
     one(pool, `SELECT (SELECT count(*) FROM users)::int AS users, (SELECT count(*) FROM roles WHERE status='pending')::int AS pending_roles,

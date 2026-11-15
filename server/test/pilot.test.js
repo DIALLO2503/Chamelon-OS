@@ -22,7 +22,7 @@ const PILOT = {
   SMSGATE_MA_USER: 'MAPHONE', SMSGATE_MA_PASSWORD: 'ma-secret', SMSGATE_GN_USER: 'GNPHONE', SMSGATE_GN_PASSWORD: 'gn-secret',
 }
 Object.assign(process.env, PILOT)
-const { pool, one, tx, resetDb, rails, phone } = await import('./helpers.js')
+const { pool, one, tx, resetDb, rails, phone, user, act, linkFor, partyByPhone: partyRow } = await import('./helpers.js')
 const { partyByPhone } = await import('../context.js')
 
 let server, base
@@ -98,4 +98,29 @@ test('live boots without a payment partner only when every open country is in "r
   assert.equal(boot({ SIGNUP_REGIONS: 'MA,GN,SN', CUSTODY_SN: 'record', SMSGATE_USER: 'ANY', SMSGATE_PASSWORD: 'x' }), 'boots')
   assert.match(boot({ SMSGATE_GN_USER: '', SMSGATE_GN_PASSWORD: '' }), /missing: GN/)
   assert.match(boot({ PAYMENT_PROVIDER: 'sandbox' }), /requires PAYMENT_PROVIDER=partner/)
+})
+
+test('the funnel counts who opened a link, who acted on it and who signed up afterwards, once per person', async () => {
+  const { linkFunnel } = await import('../admin.js')
+  const artisan = await user('MA', 'maallem')
+  const invite = async title => {
+    const p = phone('MA')
+    await act(artisan, 'jobs', 'create', { title, phone: p, name: 'Cliente Pilote', stage1: 'Pose', amount1: '1500' })
+    const job = await one(pool, 'SELECT * FROM jobs WHERE title=$1', [title])
+    return { p, job, token: await linkFor('job', job.id, (await partyRow(p)).id) }
+  }
+  const engaged = await invite('Cuisine'), silent = await invite('Terrasse')
+  await linkFor('job', silent.job.id, (await partyRow(silent.p)).id) // the same link sent again: still one invitation
+
+  await act(artisan, 'jobs', 'done', {}, engaged.job.id)
+  assert.equal((await fetch(`${base}/public/${engaged.token}`)).status, 200)
+  const { sandboxCode } = await post(`/public/${engaged.token}/otp`, {})
+  assert.equal((await post(`/public/${engaged.token}/act`, { action: 'validate', code: sandboxCode })).status, 200)
+  // The client then opens an account with the same number.
+  const otp = await post('/auth/otp', { phone: engaged.p })
+  const { signupToken } = await post('/auth/verify', { phone: engaged.p, code: otp.sandboxCode })
+  assert.equal((await post('/auth/register', { signupToken, name: 'Cliente Pilote', region: 'MA', persona: 'parent', pin: '4826' })).status, 200)
+
+  const row = (await linkFunnel()).find(r => r.region === 'MA' && r.kind === 'job')
+  assert.deepEqual({ sent: row.sent, opened: row.opened, acted: row.acted, signed_up: row.signed_up, openRate: row.openRate }, { sent: 2, opened: 1, acted: 1, signed_up: 1, openRate: 50 })
 })

@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { api, imageUrl } from '../api.js'
 import Icon from '../ui/Icon.jsx'
 
-const TABS = [['overview', 'Vue d’ensemble'], ['users', 'Utilisateurs'], ['disputes', 'Litiges'], ['adjustments', 'Ajustements'], ['ops', 'Opérations']]
+const TABS = [['overview', 'Vue d’ensemble'], ['pilot', 'Pilote'], ['users', 'Utilisateurs'], ['disputes', 'Litiges'], ['adjustments', 'Ajustements'], ['ops', 'Opérations']]
 const when = iso => new Intl.DateTimeFormat('fr-FR', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }).format(new Date(iso))
 
 function useLoad(path, deps = []) {
@@ -163,6 +163,32 @@ function UserDetail({ id, onBack }) {
 function Users() {
   const [picked, setPicked] = useState(null)
   return picked ? <UserDetail id={picked.id} onBack={() => setPicked(null)} /> : <UserSearch onPick={setPicked} />
+}
+
+/* ---------------- pilot ---------------- */
+const KIND_LABEL = { job: 'Chantier', order: 'Commande', escrow: 'Paiement protégé', recorded: 'Paiement signalé', tontine: 'Tontine', statement: 'Carnet de crédit' }
+const rate = (n, pct) => (pct === null ? String(n) : `${n} (${pct} %)`)
+function Pilot() {
+  const { data, error } = useLoad('/admin/funnel')
+  if (!data) return error ? <Err msg={error} /> : <div className="skeleton" style={{ height: 160 }} />
+  return (
+    <>
+      <section className="sec">
+        <h2>Comptes par pays</h2>
+        <div className="card adm-table-wrap"><table className="adm-table"><thead><tr><th>Pays</th><th>Comptes</th><th>Nouveaux ({data.days} j)</th><th>Actifs (7 j)</th></tr></thead>
+          <tbody>{data.users.map(u => <tr key={u.region}><td>{u.regionName}</td><td className="num">{u.users}</td><td className="num">{u.new_users}</td><td className="num">{u.active_7d}</td></tr>)}</tbody></table></div>
+      </section>
+      <section className="sec">
+        <h2>Liens envoyés, {data.days} derniers jours</h2>
+        <p className="muted">Une ligne par pays du destinataire et par type. Un lien renvoyé plusieurs fois à la même personne compte une fois.</p>
+        <div className="card adm-table-wrap"><table className="adm-table"><thead><tr><th>Pays</th><th>Type</th><th>Personnes invitées</th><th>Ont ouvert</th><th>Ont agi</th><th>Se sont inscrites</th></tr></thead>
+          <tbody>
+            {data.links.length === 0 && <tr><td colSpan={6} className="muted">Aucun lien envoyé sur la période.</td></tr>}
+            {data.links.map(l => <tr key={l.region + l.kind}><td>{l.regionName}</td><td>{KIND_LABEL[l.kind] ?? l.kind}</td><td className="num">{l.sent}</td><td className="num">{rate(l.opened, l.openRate)}</td><td className="num">{rate(l.acted, l.actRate)}</td><td className="num">{rate(l.signed_up, l.signupRate)}</td></tr>)}
+          </tbody></table></div>
+      </section>
+    </>
+  )
 }
 
 /* ---------------- disputes ---------------- */
@@ -328,7 +354,7 @@ function Ops() {
   )
 }
 
-const VIEWS = { overview: Overview, users: Users, disputes: Disputes, adjustments: Adjustments, ops: Ops }
+const VIEWS = { overview: Overview, pilot: Pilot, users: Users, disputes: Disputes, adjustments: Adjustments, ops: Ops }
 
 export default function AdminConsole({ onClose }) {
   const [tab, setTab] = useState('overview')
